@@ -44,6 +44,7 @@ class ScanRecord {
     required this.themeLabel,
     this.matiereId,
     this.competenceId,
+    this.note,
   });
 
   final String id;
@@ -52,12 +53,16 @@ class ScanRecord {
   final String? matiereId;
   final String? competenceId;
 
+  /// Précision donnée avant le scan (« exercice 3 page 45 »).
+  final String? note;
+
   Map<String, dynamic> toJson() => {
         'i': id,
         'd': date.toIso8601String(),
         't': themeLabel,
         'm': matiereId,
         'c': competenceId,
+        'n': note,
       };
 
   factory ScanRecord.fromJson(Map<String, dynamic> j) => ScanRecord(
@@ -66,6 +71,7 @@ class ScanRecord {
         themeLabel: j['t'] as String,
         matiereId: j['m'] as String?,
         competenceId: j['c'] as String?,
+        note: j['n'] as String?,
       );
 }
 

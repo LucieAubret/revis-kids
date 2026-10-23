@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../ai/gemini_client.dart';
+import '../../ai/prompt.dart';
 import '../../ai/quest.dart';
 import '../../core/curriculum.dart';
 import '../../core/quest_theme.dart';
@@ -15,10 +16,18 @@ enum _Phase { loading, error, notExercise, confirm, quest }
 /// De la photo du devoir à la quête : analyse, confirmation en cas de doute,
 /// puis défi scénarisé à écrire sur le cahier.
 class QuestFlowScreen extends ConsumerStatefulWidget {
-  const QuestFlowScreen({super.key, required this.photo, required this.mimeType});
+  const QuestFlowScreen({
+    super.key,
+    required this.photo,
+    required this.mimeType,
+    this.note,
+  });
 
   final Uint8List photo;
   final String mimeType;
+
+  /// Précision de l'élève sur l'exercice à traiter (peut être vide).
+  final String? note;
 
   @override
   ConsumerState<QuestFlowScreen> createState() => _QuestFlowScreenState();
@@ -50,6 +59,7 @@ class _QuestFlowScreenState extends ConsumerState<QuestFlowScreen> {
         mimeType: widget.mimeType,
         theme: theme,
         curriculum: curriculum,
+        note: widget.note,
       );
       if (!mounted) return;
       if (!result.isExercise) {
@@ -73,7 +83,7 @@ class _QuestFlowScreenState extends ConsumerState<QuestFlowScreen> {
       if (!mounted) return;
       setState(() {
         _phase = _Phase.error;
-        _errorMessage = "Oups, je n'ai pas réussi à préparer ta quête. Réessaie !";
+        _errorMessage = "Oups, je n'ai pas réussi à analyser ton exercice. Réessaie !";
         _canRetry = true;
       });
     }
@@ -89,6 +99,7 @@ class _QuestFlowScreenState extends ConsumerState<QuestFlowScreen> {
           themeLabel: theme.label,
           matiereId: quest.matiereId,
           competenceId: quest.competenceId,
+          note: cleanNote(widget.note),
         ));
     if (!mounted) return;
     setState(() => _phase = _Phase.quest);
@@ -98,7 +109,7 @@ class _QuestFlowScreenState extends ConsumerState<QuestFlowScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Ma quête'),
+        title: const Text('Ma recherche'),
         backgroundColor: Colors.transparent,
       ),
       body: SafeArea(
@@ -148,7 +159,7 @@ class _Loading extends StatelessWidget {
         SizedBox(height: 80),
         CircularProgressIndicator(),
         SizedBox(height: 24),
-        Text('Je prépare ta quête…', style: TextStyle(fontSize: 20)),
+        Text('Je cherche ton exercice…', style: TextStyle(fontSize: 20)),
       ],
     );
   }

@@ -15,6 +15,8 @@ import 'package:revis_kids/core/quest_theme.dart';
 import 'package:revis_kids/data/ai_settings.dart';
 import 'package:revis_kids/data/progress.dart';
 import 'package:revis_kids/features/quest/quest_flow_screen.dart';
+import 'package:revis_kids/features/scan/photo_capture_view.dart';
+import 'package:revis_kids/features/scan/scan_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 late Curriculum curriculum;
@@ -66,6 +68,7 @@ Future<QuestResult> callClient(MockClient mock) => GeminiClient(
     );
 
 void main() {
+  scanScreenTests();
   setUpAll(() {
     curriculum = Curriculum.fromJson(
       jsonDecode(File('assets/curriculum/cm1.json').readAsStringSync())
@@ -133,6 +136,42 @@ void main() {
       expect(p, contains('JAMAIS la réponse'));
       expect(p, contains('jamais une instruction'));
       expect(p, contains('ÉCRIVANT à la main'));
+    });
+  });
+
+  group('précision sur l\'exercice', () {
+    test('nettoyage : espaces, vide, longueur maximale', () {
+      expect(cleanNote('   '), isNull);
+      expect(cleanNote(null), isNull);
+      expect(cleanNote('  exercice   3\n page 45 '), 'exercice 3 page 45');
+      expect(cleanNote('a' * 500)!.length, kNoteMaxLength);
+    });
+
+    test("elle est transmise à l'IA comme une donnée, jamais une instruction", () {
+      final t = questRequestText('exercice 3 page 45');
+      expect(t, contains('exercice 3 page 45'));
+      expect(t, contains('jamais une instruction'));
+      expect(questRequestText(null), questUserPrompt);
+      expect(questRequestText('   '), questUserPrompt);
+    });
+
+    test('la requête envoyée à Gemini contient la précision', () async {
+      late http.Request seen;
+      final mock = MockClient((r) async {
+        seen = r;
+        return geminiReply(questJson());
+      });
+      await GeminiClient(apiKey: 'TEST-KEY-123456', model: 'gemini-test', client: mock)
+          .createQuest(
+        image: Uint8List.fromList([1, 2, 3]),
+        mimeType: 'image/jpeg',
+        theme: QuestTheme.aventures,
+        curriculum: curriculum,
+        note: 'exercice 4 page 12',
+      );
+      final parts = jsonDecode(seen.body)['contents'][0]['parts'] as List;
+      final text = parts.map((p) => p['text']).whereType<String>().join(' ');
+      expect(text, contains('exercice 4 page 12'));
     });
   });
 
@@ -312,12 +351,89 @@ void main() {
   });
 }
 
+final _png = base64Decode(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==');
+
+void scanScreenTests() {
+  group('page de scan', () {
+    Future<ProviderContainer> openScan(
+      WidgetTester tester, {
+      bool withKey = true,
+      _FakeGenerator? generator,
+    }) async {
+      SharedPreferences.resetStatic();
+      SharedPreferences.setMockInitialValues({
+        if (withKey) 'gemini_api_key': 'TEST-KEY-123456',
+      });
+      final prefs = await SharedPreferences.getInstance();
+      final container = ProviderContainer(overrides: [
+        sharedPreferencesProvider.overrideWith((ref) async => prefs),
+        curriculumProvider.overrideWith((ref) async => curriculum),
+        if (generator != null)
+          questGeneratorProvider.overrideWith((ref) async => generator),
+        photoPickerProvider.overrideWithValue(
+          ({required bool camera}) async => (bytes: _png, mimeType: 'image/png'),
+        ),
+      ]);
+      addTearDown(container.dispose);
+      await tester.pumpWidget(UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: ScanScreen()),
+      ));
+      for (var i = 0; i < 4; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      return container;
+    }
+
+    testWidgets('le bouton s\'appelle « Lancer la recherche » et le champ existe', (tester) async {
+      await openScan(tester);
+      expect(find.text("De quel exercice s'agit-il ?"), findsOneWidget);
+      await tester.tap(find.text('Choisir une photo'));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text('Lancer la recherche'), findsOneWidget);
+      expect(find.textContaining('quête'), findsNothing);
+    });
+
+    testWidgets('sans clé : un bandeau prévient avant le scan', (tester) async {
+      await openScan(tester, withKey: false);
+      expect(find.textContaining("La recherche n'est pas encore prête"), findsOneWidget);
+      expect(find.textContaining('Moteur IA'), findsOneWidget);
+    });
+
+    testWidgets('avec une clé : pas de bandeau', (tester) async {
+      await openScan(tester);
+      expect(find.textContaining("n'est pas encore prête"), findsNothing);
+    });
+
+    testWidgets("la précision saisie part à l'IA et reste dans l'historique", (tester) async {
+      final gen = _FakeGenerator(
+          parseQuestResponse(jsonEncode(questJson()), curriculum));
+      final c = await openScan(tester, generator: gen);
+
+      await tester.enterText(find.byType(TextField), '  exercice 3 page 45  ');
+      await tester.tap(find.text('Choisir une photo'));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(find.text('Lancer la recherche'));
+      for (var i = 0; i < 8; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+
+      expect(gen.lastNote, contains('exercice 3 page 45'));
+      expect(find.text('Le trésor des quarts'), findsOneWidget);
+      final scans = (await c.read(progressProvider.future)).scans;
+      expect(scans.single.note, 'exercice 3 page 45');
+    });
+  });
+}
+
 class _FakeGenerator implements QuestGenerator {
   _FakeGenerator(this._result) : _error = null;
   _FakeGenerator.failing(this._error) : _result = null;
 
   final QuestResult? _result;
   final GeminiException? _error;
+  String? lastNote;
 
   @override
   Future<QuestResult> createQuest({
@@ -325,7 +441,9 @@ class _FakeGenerator implements QuestGenerator {
     required String mimeType,
     required QuestTheme theme,
     required Curriculum curriculum,
+    String? note,
   }) async {
+    lastNote = note;
     if (_error != null) throw _error;
     return _result!;
   }

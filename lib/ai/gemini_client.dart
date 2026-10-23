@@ -34,7 +34,7 @@ class GeminiException implements Exception {
           "Je ne peux pas analyser cette photo. Essaie avec ta feuille d'exercice.",
         GeminiErrorKind.badResponse ||
         GeminiErrorKind.server =>
-          "Oups, je n'ai pas réussi à préparer ta quête. Réessaie !",
+          "Oups, je n'ai pas réussi à analyser ton exercice. Réessaie !",
       };
 
   @override
@@ -48,6 +48,7 @@ abstract class QuestGenerator {
     required String mimeType,
     required QuestTheme theme,
     required Curriculum curriculum,
+    String? note,
   });
 }
 
@@ -140,6 +141,7 @@ class GeminiClient implements QuestGenerator, TutorService {
     required String mimeType,
     required QuestTheme theme,
     required Curriculum curriculum,
+    String? note,
   }) async {
     final text = await _generate({
       'systemInstruction': {
@@ -151,7 +153,7 @@ class GeminiClient implements QuestGenerator, TutorService {
         {
           'role': 'user',
           'parts': [
-            {'text': questUserPrompt},
+            {'text': questRequestText(note)},
             {
               'inlineData': {'mimeType': mimeType, 'data': base64Encode(image)},
             },

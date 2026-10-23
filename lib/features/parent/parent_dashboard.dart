@@ -248,7 +248,8 @@ class HistoryTab extends StatelessWidget {
             title: Text(comp?.titre ?? 'Compétence à identifier'),
             subtitle: Text(
               '${formatDateTime(s.date)} · ${matiere?.nom ?? 'Matière à identifier'}'
-              ' · Univers : ${s.themeLabel}',
+              ' · Univers : ${s.themeLabel}'
+              '${s.note == null ? '' : '\nPrécision : ${s.note}'}',
             ),
           ),
         );

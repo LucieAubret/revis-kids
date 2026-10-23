@@ -174,7 +174,7 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Text(
-                      'Confidentialité. Pour créer une quête, la photo du devoir est '
+                      'Confidentialité. Pour analyser un devoir, la photo est '
                       'envoyée à Google (Gemini) afin d\'être analysée. '
                       "L'application ne la conserve pas. Selon les conditions de Google, "
                       "l'offre gratuite de l'API peut réutiliser les données pour "

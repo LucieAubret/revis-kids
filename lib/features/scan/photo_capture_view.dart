@@ -38,12 +38,16 @@ class PhotoCaptureView extends ConsumerStatefulWidget {
     required this.confirmLabel,
     required this.onConfirm,
     this.header,
+    this.footer,
   });
 
   final String emptyHint;
   final String confirmLabel;
   final void Function(Uint8List bytes, String mimeType) onConfirm;
   final Widget? header;
+
+  /// Zone sous l'aperçu et au-dessus des boutons (ex. : un champ de commentaire).
+  final Widget? footer;
 
   @override
   ConsumerState<PhotoCaptureView> createState() => _PhotoCaptureViewState();
@@ -127,7 +131,11 @@ class _PhotoCaptureViewState extends ConsumerState<PhotoCaptureView> {
                 const SizedBox(height: 12),
                 Text(_message!, style: TextStyle(color: scheme.error)),
               ],
-              const SizedBox(height: 16),
+              if (widget.footer != null) ...[
+                const SizedBox(height: 12),
+                widget.footer!,
+              ],
+              const SizedBox(height: 12),
               Wrap(
                 spacing: 12,
                 runSpacing: 12,
