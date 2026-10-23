@@ -3,8 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
-import '../../core/quest_theme.dart';
-import '../../data/progress.dart';
+import '../quest/quest_flow_screen.dart';
 
 /// Capture de la feuille de devoir (appareil photo ou, à défaut, un fichier).
 class ScanScreen extends ConsumerStatefulWidget {
@@ -20,6 +19,7 @@ class ScanScreen extends ConsumerStatefulWidget {
 class _ScanScreenState extends ConsumerState<ScanScreen> {
   late final ImagePicker _picker = widget.picker ?? ImagePicker();
   Uint8List? _photo;
+  String _mime = 'image/jpeg';
   String? _message;
 
   bool get _cameraAvailable {
@@ -33,11 +33,18 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
   Future<void> _capture(ImageSource source) async {
     setState(() => _message = null);
     try {
-      final file = await _picker.pickImage(source: source, maxWidth: 2000);
+      final file = await _picker.pickImage(
+        source: source,
+        maxWidth: 2000,
+        imageQuality: 85,
+      );
       if (file == null) return;
       final bytes = await file.readAsBytes();
       if (!mounted) return;
-      setState(() => _photo = bytes);
+      setState(() {
+        _photo = bytes;
+        _mime = file.mimeType ?? 'image/jpeg';
+      });
     } catch (_) {
       if (!mounted) return;
       setState(() => _message =
@@ -46,19 +53,10 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
     }
   }
 
-  Future<void> _saveScan() async {
-    final theme = ref.read(questThemeProvider);
-    final now = DateTime.now();
-    await ref.read(progressProvider.notifier).addScan(ScanRecord(
-          id: now.microsecondsSinceEpoch.toString(),
-          date: now,
-          themeLabel: theme.label,
-        ));
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-      content: Text('Devoir enregistré ! Ta quête arrive bientôt.'),
+  void _startQuest() {
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => QuestFlowScreen(photo: _photo!, mimeType: _mime),
     ));
-    Navigator.of(context).pop();
   }
 
   @override
@@ -133,8 +131,8 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
                   if (_photo != null) ...[
                     const SizedBox(height: 16),
                     FilledButton(
-                      onPressed: _saveScan,
-                      child: const Text('Enregistrer mon devoir'),
+                      onPressed: _startQuest,
+                      child: const Text('Lancer ma quête'),
                     ),
                   ],
                 ],

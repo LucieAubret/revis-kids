@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/curriculum.dart';
 import '../../data/progress.dart';
+import 'ai_settings_screen.dart';
 import 'sample_data.dart';
 
 const _mois = [
@@ -40,6 +41,13 @@ class ParentDashboard extends ConsumerWidget {
                 icon: const Icon(Icons.science_outlined),
                 onPressed: () => loadSampleData(ref),
               ),
+            IconButton(
+              tooltip: 'Moteur IA',
+              icon: const Icon(Icons.key_rounded),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const AiSettingsScreen()),
+              ),
+            ),
             IconButton(
               tooltip: 'Verrouiller',
               icon: const Icon(Icons.lock_rounded),
