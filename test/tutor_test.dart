@@ -13,6 +13,7 @@ import 'package:revis_kids/ai/tutor.dart';
 import 'package:revis_kids/core/curriculum.dart';
 import 'package:revis_kids/core/quest_theme.dart';
 import 'package:revis_kids/data/progress.dart';
+import 'package:revis_kids/game/game_state.dart';
 import 'package:revis_kids/features/scan/photo_capture_view.dart';
 import 'package:revis_kids/features/tutor/answer_flow_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -261,9 +262,12 @@ void main() {
       List<String> verdicts, {
       Duration minRead = Duration.zero,
       Object? tutorError,
+      ProgressState? seedProgress,
     }) async {
       SharedPreferences.resetStatic();
-      SharedPreferences.setMockInitialValues({});
+      SharedPreferences.setMockInitialValues({
+        if (seedProgress != null) 'progress_v1': seedProgress.encode(),
+      });
       prefs = await SharedPreferences.getInstance();
       final tutor = _FakeTutor(verdicts);
       final container = ProviderContainer(overrides: [
@@ -323,6 +327,56 @@ void main() {
       expect(a.single.success, isTrue);
       expect(a.single.capsuleRead, isFalse);
       expect(a.single.competenceId, 'MA.FRA.03');
+    });
+
+    testWidgets('une réussite du premier coup rapporte XP, étoiles et matériau', (tester) async {
+      final (c, _) = await openFlow(tester, [verifJson(correct: true, message: 'Bravo !')]);
+      await submitPhoto(tester);
+
+      expect(find.text('+30 XP'), findsOneWidget);
+      final g = await c.read(gameProvider.future);
+      expect((g.xp, g.stars, g.materialCount('pierre')), (30, 3, 2));
+    });
+
+    testWidgets('devenir « acquise » donne le gros bonus', (tester) async {
+      DateTime d(int back) => DateTime.now().subtract(Duration(days: back));
+      final seed = ProgressState(attempts: [
+        Attempt(competenceId: 'MA.FRA.03', date: d(3), success: true),
+        Attempt(competenceId: 'MA.FRA.03', date: d(2), success: true),
+      ]);
+      final (c, _) = await openFlow(
+        tester,
+        [verifJson(correct: true, message: 'Bravo !')],
+        seedProgress: seed,
+      );
+      await submitPhoto(tester);
+
+      expect(find.textContaining('Notion acquise'), findsOneWidget);
+      final g = await c.read(gameProvider.future);
+      expect(g.xp, 80);
+      expect(g.stars, 8);
+    });
+
+    testWidgets('au-delà de 3 réussites le même jour : plus de récompense', (tester) async {
+      DateTime today(int hour) {
+        final n = DateTime.now();
+        return DateTime(n.year, n.month, n.day, 0, hour);
+      }
+
+      final seed = ProgressState(attempts: [
+        for (var i = 1; i <= 3; i++)
+          Attempt(competenceId: 'MA.FRA.03', date: today(i), success: true),
+      ]);
+      final (c, _) = await openFlow(
+        tester,
+        [verifJson(correct: true, message: 'Bravo !')],
+        seedProgress: seed,
+      );
+      await submitPhoto(tester);
+
+      expect(find.textContaining("déjà bien travaillé"), findsOneWidget);
+      final g = await c.read(gameProvider.future);
+      expect((g.xp, g.stars), (0, 0));
     });
 
     testWidgets("une mauvaise réponse donne un indice, jamais la réponse", (tester) async {

@@ -10,6 +10,9 @@ import '../../ai/tutor.dart';
 import '../../core/curriculum.dart';
 import '../../core/quest_theme.dart';
 import '../../data/progress.dart';
+import '../../game/catalog.dart';
+import '../../game/game_state.dart';
+import '../../ui/game_widgets.dart';
 import '../scan/photo_capture_view.dart';
 
 /// Durée minimale de lecture de la capsule avant de pouvoir passer au quiz.
@@ -60,6 +63,7 @@ class _AnswerFlowScreenState extends ConsumerState<AnswerFlowScreen> {
   bool _canRetryError = true;
 
   Verification? _pending;
+  Reward? _reward;
   Uint8List? _lastPhoto;
   String _lastMime = 'image/jpeg';
 
@@ -163,18 +167,47 @@ class _AnswerFlowScreenState extends ConsumerState<AnswerFlowScreen> {
   Future<void> _applyVerdict(Verification v) async {
     _totalAttempts++;
     final competenceId = widget.quest.competenceId;
+    var becameAcquired = false;
+    var cappedToday = false;
     if (competenceId != null) {
-      await ref.read(progressProvider.notifier).recordAttempt(Attempt(
-            competenceId: competenceId,
-            date: DateTime.now(),
-            success: v.correct,
-            capsuleRead: _capsulesDone > 0,
-          ));
+      final progress = ref.read(progressProvider.notifier);
+      final before = await ref.read(progressProvider.future);
+      final statusBefore = before.statusOf(competenceId);
+      final now = DateTime.now();
+      final winsToday = before
+          .attemptsFor(competenceId)
+          .where((a) =>
+              a.success &&
+              a.date.year == now.year &&
+              a.date.month == now.month &&
+              a.date.day == now.day)
+          .length;
+      cappedToday = v.correct && winsToday >= kReussitesRecompenseesParJour;
+      await progress.recordAttempt(Attempt(
+        competenceId: competenceId,
+        date: now,
+        success: v.correct,
+        capsuleRead: _capsulesDone > 0,
+      ));
+      final after = await ref.read(progressProvider.future);
+      becameAcquired = statusBefore != CompetenceStatus.acquise &&
+          after.statusOf(competenceId) == CompetenceStatus.acquise;
     }
     if (!mounted) return;
     if (v.correct) {
+      final reward = await ref.read(gameProvider.notifier).applyReward(
+            computeReward(
+              matiereId: widget.quest.matiereId,
+              fails: _fails,
+              capsules: _capsulesDone,
+              becameAcquired: becameAcquired,
+              cappedToday: cappedToday,
+            ),
+          );
+      if (!mounted) return;
       setState(() {
         _hint = v.message;
+        _reward = reward;
         _phase = _Phase.correct;
       });
       return;
@@ -230,12 +263,13 @@ class _AnswerFlowScreenState extends ConsumerState<AnswerFlowScreen> {
     if (choice == q.bonneReponse) {
       if (_quizIndex + 1 >= _capsule!.quiz.length) {
         // Capsule comprise : on repart sur le même défi avec trois nouveaux essais.
+        ref.read(gameProvider.notifier).addXp(kXpCapsuleComprise);
         setState(() {
           _capsulesDone++;
           _fails = 0;
           _quizFeedback = null;
           _wrongChoice = null;
-          _notice = 'Bravo, tu as bien lu la capsule ! '
+          _notice = 'Bravo, tu as bien lu la capsule ! +$kXpCapsuleComprise XP. '
               'Retente maintenant le même défi.';
           _phase = _Phase.capture;
         });
@@ -291,6 +325,7 @@ class _AnswerFlowScreenState extends ConsumerState<AnswerFlowScreen> {
       _Phase.correct => _Center(child: _Correct(
           message: _hint ?? 'Bravo !',
           attempts: _totalAttempts,
+          reward: _reward,
           onDone: () => Navigator.of(context).popUntil((r) => r.isFirst),
         )),
       _Phase.hint => _Center(child: _Hint(
@@ -452,11 +487,17 @@ class _ConfirmRead extends StatelessWidget {
 }
 
 class _Correct extends StatelessWidget {
-  const _Correct({required this.message, required this.attempts, required this.onDone});
+  const _Correct({
+    required this.message,
+    required this.attempts,
+    required this.onDone,
+    this.reward,
+  });
 
   final String message;
   final int attempts;
   final VoidCallback onDone;
+  final Reward? reward;
 
   @override
   Widget build(BuildContext context) {
@@ -470,6 +511,10 @@ class _Correct extends StatelessWidget {
             style: text.headlineMedium?.copyWith(fontWeight: FontWeight.w800)),
         const SizedBox(height: 12),
         Text(message, style: text.titleMedium, textAlign: TextAlign.center),
+        if (reward != null) ...[
+          const SizedBox(height: 20),
+          _RewardView(reward: reward!),
+        ],
         const SizedBox(height: 24),
         FilledButton(onPressed: onDone, child: const Text('Terminer')),
       ],
@@ -658,6 +703,69 @@ class _ErrorView extends StatelessWidget {
         if (onRetry != null) ...[
           const SizedBox(height: 24),
           FilledButton(onPressed: onRetry, child: const Text('Réessayer')),
+        ],
+      ],
+    );
+  }
+}
+
+/// Récompenses gagnées : XP, étoiles, matériau, niveau, notion acquise.
+class _RewardView extends StatelessWidget {
+  const _RewardView({required this.reward});
+
+  final Reward reward;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    if (reward.cappedToday) {
+      return Text(
+        "Tu as déjà bien travaillé cette notion aujourd'hui. "
+        'Reviens demain pour la retenir encore mieux et gagner des récompenses !',
+        textAlign: TextAlign.center,
+        style: text.titleSmall,
+      );
+    }
+    final material =
+        reward.materialId == null ? null : materialById(reward.materialId!);
+    return Column(
+      children: [
+        Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            StatPill(
+              icon: Icons.bolt_rounded,
+              label: '+${reward.xp} XP',
+              color: const Color(0xFF7C5CFF),
+            ),
+            StatPill(
+              icon: Icons.star_rounded,
+              label: '+${reward.stars}',
+              color: const Color(0xFFFFB400),
+              semanticLabel: '${reward.stars} étoiles gagnées',
+            ),
+            if (material != null)
+              StatPill(
+                icon: material.icon,
+                label: '+${reward.materialCount}',
+                color: material.color,
+                semanticLabel: '${reward.materialCount} ${material.label} gagné(s)',
+              ),
+          ],
+        ),
+        if (reward.becameAcquired) ...[
+          const SizedBox(height: 12),
+          Text('Notion acquise ! Tu la maîtrises vraiment.',
+              textAlign: TextAlign.center,
+              style: text.titleMedium?.copyWith(color: const Color(0xFF2E7D32))),
+        ],
+        if (reward.levelUpTo != null) ...[
+          const SizedBox(height: 8),
+          Text('Niveau ${reward.levelUpTo} atteint !',
+              textAlign: TextAlign.center,
+              style: text.titleMedium?.copyWith(color: const Color(0xFF7C5CFF))),
         ],
       ],
     );

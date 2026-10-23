@@ -2,8 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/quest_theme.dart';
+import '../../game/catalog.dart';
+import '../../game/game_state.dart';
+import '../../ui/fun_background.dart';
+import '../../ui/game_widgets.dart';
+import '../../ui/mascot.dart';
+import '../../ui/pressable.dart';
+import '../../ui/universe_art.dart';
 import '../parent/parent_gate.dart';
 import '../scan/scan_screen.dart';
+import '../shop/shop_screen.dart';
+import '../village/village_screen.dart';
+
+const _ink = Color(0xFF2B2440);
+
+void _open(BuildContext context, Widget screen) =>
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => screen));
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -11,153 +25,227 @@ class HomeScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = ref.watch(questThemeProvider);
-    final scheme = Theme.of(context).colorScheme;
-
-    final hero = _Hero(theme: theme);
-    final picker = _ThemePicker(
-      selected: theme,
-      onSelect: (t) => ref.read(questThemeProvider.notifier).select(t),
-    );
-    final scanButton = _ScanButton(
-      onPressed: () => Navigator.of(context).push(
-        MaterialPageRoute<void>(builder: (_) => const ScanScreen()),
-      ),
-    );
+    final game = ref.watch(gameProvider).value ?? const GameState();
 
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        actions: [
-          IconButton(
-            tooltip: 'Espace parent',
-            icon: const Icon(Icons.lock_outline_rounded),
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => const ParentGate()),
-            ),
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final wide = constraints.maxWidth >= 900;
-            return Center(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 1100),
-                  child: wide
-                      ? Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [hero, const SizedBox(height: 32), scanButton],
+      body: FunBackground(
+        theme: theme,
+        child: SafeArea(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final wide = constraints.maxWidth >= 900;
+              return Center(
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.fromLTRB(wide ? 32 : 16, 12, wide ? 32 : 16, 32),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1100),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _Header(game: game, wide: wide),
+                        const SizedBox(height: 20),
+                        wide
+                            ? Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  const Expanded(flex: 5, child: _MascotHero()),
+                                  const SizedBox(width: 32),
+                                  Expanded(
+                                    flex: 4,
+                                    child: _ScanButton(theme: theme),
+                                  ),
+                                ],
+                              )
+                            : Column(
+                                children: [
+                                  const _MascotHero(),
+                                  const SizedBox(height: 20),
+                                  _ScanButton(theme: theme),
+                                ],
                               ),
-                            ),
-                            const SizedBox(width: 48),
-                            Expanded(child: picker),
-                          ],
-                        )
-                      : Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            hero,
-                            const SizedBox(height: 24),
-                            picker,
-                            const SizedBox(height: 24),
-                            scanButton,
-                          ],
+                        const SizedBox(height: 32),
+                        Text(
+                          'Choisis ton univers',
+                          style: Theme.of(context).textTheme.headlineMedium,
                         ),
+                        const SizedBox(height: 14),
+                        _UniverseRow(selected: theme, wide: wide),
+                        const SizedBox(height: 28),
+                        _Shortcuts(game: game, wide: wide),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
       ),
-      backgroundColor: scheme.surface,
     );
   }
 }
 
-class _Hero extends StatelessWidget {
-  const _Hero({required this.theme});
+class _Header extends StatelessWidget {
+  const _Header({required this.game, required this.wide});
+
+  final GameState game;
+  final bool wide;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Pressable(
+          borderRadius: 40,
+          semanticLabel: 'Mon avatar',
+          onTap: () => _open(context, const ShopScreen(initialTab: 0)),
+          child: AvatarBadge(game: game, size: wide ? 72 : 60),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              LevelBar(xp: game.xp, width: wide ? 160 : 110),
+              Pressable(
+                borderRadius: 40,
+                semanticLabel: 'Mes étoiles : ${game.stars}',
+                onTap: () => _open(context, const ShopScreen()),
+                child: StatPill(
+                  icon: Icons.star_rounded,
+                  label: '${game.stars}',
+                  color: const Color(0xFFFFB400),
+                  semanticLabel: '${game.stars} étoiles',
+                ),
+              ),
+            ],
+          ),
+        ),
+        // Accès parent : discret, protégé par un code PIN.
+        Tooltip(
+          message: 'Espace parent',
+          child: TextButton.icon(
+            onPressed: () => _open(context, const ParentGate()),
+            icon: const Icon(Icons.lock_outline_rounded, size: 20),
+            label: wide ? const Text('Espace parent') : const SizedBox.shrink(),
+            style: TextButton.styleFrom(
+              foregroundColor: _ink.withValues(alpha: 0.55),
+              shape: const StadiumBorder(),
+              padding: EdgeInsets.symmetric(horizontal: wide ? 16 : 10, vertical: 10),
+              textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MascotHero extends StatelessWidget {
+  const _MascotHero();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Mascot(size: 150),
+        SizedBox(width: 4),
+        Flexible(child: SpeechBubble(text: 'Prêt pour ta mission du jour ?', maxWidth: 460)),
+      ],
+    );
+  }
+}
+
+class _ScanButton extends StatelessWidget {
+  const _ScanButton({required this.theme});
 
   final QuestTheme theme;
 
   @override
   Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    final scheme = Theme.of(context).colorScheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
+    return Pressable(
+      borderRadius: 36,
+      shadowColor: theme.gradient.last,
+      semanticLabel: 'Scanner mon devoir',
+      onTap: () => _open(context, const ScanScreen()),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(36),
+          gradient: LinearGradient(
+            colors: theme.gradient,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(theme.icon, size: 40, color: scheme.primary),
-            const SizedBox(width: 12),
-            Text(
-              "Revis'Kids",
-              style: text.headlineMedium?.copyWith(
-                fontWeight: FontWeight.w800,
-                color: scheme.primary,
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+              child: Icon(Icons.photo_camera_rounded, size: 40, color: theme.gradient.last),
+            ),
+            const SizedBox(width: 18),
+            const Flexible(
+              child: Text(
+                'Scanner mon devoir',
+                style: TextStyle(
+                  fontFamily: kHeadingFont,
+                  fontSize: 30,
+                  fontWeight: FontWeight.w600,
+                  height: 1.1,
+                  color: Colors.white,
+                ),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 24),
-        Text(
-          'Salut ! Prêt pour une nouvelle quête ?',
-          style: text.displaySmall?.copyWith(fontWeight: FontWeight.w800),
-        ),
-        const SizedBox(height: 12),
-        Text(
-          'Prends ton devoir en photo : je le transforme en défi. '
-          'Tu écris ta réponse sur ton cahier, puis tu me la montre.',
-          style: text.titleMedium,
-        ),
-      ],
+      ),
     );
   }
 }
 
-class _ThemePicker extends StatelessWidget {
-  const _ThemePicker({required this.selected, required this.onSelect});
+class _UniverseRow extends ConsumerWidget {
+  const _UniverseRow({required this.selected, required this.wide});
 
   final QuestTheme selected;
-  final ValueChanged<QuestTheme> onSelect;
+  final bool wide;
 
   @override
-  Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
+  Widget build(BuildContext context, WidgetRef ref) {
+    void choose(QuestTheme t) => ref.read(questThemeProvider.notifier).select(t);
+    final cards = [
+      for (final t in QuestTheme.values)
+        _UniverseCard(theme: t, selected: t == selected, onTap: () => choose(t)),
+    ];
+    if (wide) {
+      return Row(
+        children: [
+          for (var i = 0; i < cards.length; i++) ...[
+            if (i > 0) const SizedBox(width: 20),
+            Expanded(child: cards[i]),
+          ],
+        ],
+      );
+    }
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          "Choisis ton univers",
-          style: text.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-        ),
-        const SizedBox(height: 12),
-        for (final t in QuestTheme.values) ...[
-          _ThemeCard(
-            theme: t,
-            selected: t == selected,
-            onTap: () => onSelect(t),
-          ),
-          const SizedBox(height: 12),
+        for (var i = 0; i < cards.length; i++) ...[
+          if (i > 0) const SizedBox(height: 16),
+          cards[i],
         ],
       ],
     );
   }
 }
 
-class _ThemeCard extends StatelessWidget {
-  const _ThemeCard({
-    required this.theme,
-    required this.selected,
-    required this.onTap,
-  });
+class _UniverseCard extends StatelessWidget {
+  const _UniverseCard({required this.theme, required this.selected, required this.onTap});
 
   final QuestTheme theme;
   final bool selected;
@@ -165,55 +253,90 @@ class _ThemeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    return Semantics(
-      button: true,
+    return Pressable(
+      borderRadius: 32,
+      shadowColor: theme.gradient.last,
       selected: selected,
-      label: theme.label,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(20),
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: selected ? theme.seed : Colors.transparent,
-              width: 3,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.06),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-              ),
-            ],
+      semanticLabel: theme.label,
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        height: 200,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(32),
+          border: Border.all(
+            color: selected ? Colors.white : Colors.transparent,
+            width: 5,
           ),
-          child: Row(
+          gradient: LinearGradient(
+            colors: theme.gradient,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(27),
+          child: Stack(
             children: [
-              CircleAvatar(
-                radius: 28,
-                backgroundColor: theme.seed.withValues(alpha: 0.15),
-                child: Icon(theme.icon, color: theme.seed, size: 30),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
+              Positioned.fill(child: UniverseArt(theme: theme)),
+              Positioned(
+                left: 18,
+                top: 16,
+                right: 18,
+                child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      theme.label,
-                      style: text.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            theme.label,
+                            style: const TextStyle(
+                              fontFamily: kHeadingFont,
+                              fontSize: 25,
+                              fontWeight: FontWeight.w600,
+                              height: 1.1,
+                              color: Colors.white,
+                              shadows: [Shadow(color: Color(0x66000000), blurRadius: 6)],
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            theme.tagline,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                              color: Colors.white,
+                              shadows: [Shadow(color: Color(0x66000000), blurRadius: 6)],
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    Text(theme.tagline, style: text.bodyMedium),
+                    if (selected)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.check_circle_rounded, size: 18, color: theme.gradient.last),
+                            const SizedBox(width: 4),
+                            Text('Choisi',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  color: theme.gradient.last,
+                                )),
+                          ],
+                        ),
+                      ),
                   ],
                 ),
               ),
-              if (selected) Icon(Icons.check_circle_rounded, color: theme.seed),
             ],
           ),
         ),
@@ -222,22 +345,93 @@ class _ThemeCard extends StatelessWidget {
   }
 }
 
-class _ScanButton extends StatelessWidget {
-  const _ScanButton({required this.onPressed});
+class _Shortcuts extends StatelessWidget {
+  const _Shortcuts({required this.game, required this.wide});
 
-  final VoidCallback onPressed;
+  final GameState game;
+  final bool wide;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 72,
-      child: FilledButton.icon(
-        onPressed: onPressed,
-        icon: const Icon(Icons.camera_alt_rounded, size: 32),
-        label: const Text('Scanner mon devoir'),
-        style: FilledButton.styleFrom(
-          textStyle: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+    final built = game.buildingLevels.values.fold<int>(0, (a, b) => a + b);
+    final total = buildings.length * kBuildingMaxLevel;
+    final tiles = [
+      _ShortcutTile(
+        icon: Icons.holiday_village_rounded,
+        color: const Color(0xFF2FAE66),
+        title: 'Mon village',
+        subtitle: '$built / $total niveaux construits',
+        onTap: () => _open(context, const VillageScreen()),
+      ),
+      _ShortcutTile(
+        icon: Icons.storefront_rounded,
+        color: const Color(0xFFFF8A3D),
+        title: 'Boutique',
+        subtitle: '${game.stars} étoile(s) à dépenser',
+        onTap: () => _open(context, const ShopScreen()),
+      ),
+    ];
+    return wide
+        ? Row(children: [
+            Expanded(child: tiles[0]),
+            const SizedBox(width: 20),
+            Expanded(child: tiles[1]),
+          ])
+        : Column(children: [tiles[0], const SizedBox(height: 14), tiles[1]]);
+  }
+}
+
+class _ShortcutTile extends StatelessWidget {
+  const _ShortcutTile({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Pressable(
+      borderRadius: 28,
+      semanticLabel: title,
+      onTap: onTap,
+      shadowColor: color,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(28),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Icon(icon, color: Colors.white, size: 34),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: Theme.of(context).textTheme.titleLarge),
+                  Text(subtitle, style: Theme.of(context).textTheme.bodyMedium),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, color: _ink.withValues(alpha: 0.4), size: 30),
+          ],
         ),
       ),
     );

@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/curriculum.dart';
 import '../../data/progress.dart';
+import '../../game/catalog.dart';
+import '../../game/game_state.dart';
 import 'ai_settings_screen.dart';
 import 'sample_data.dart';
 
@@ -27,6 +29,7 @@ class ParentDashboard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final curriculum = ref.watch(curriculumProvider);
     final progress = ref.watch(progressProvider);
+    final game = ref.watch(gameProvider).value ?? const GameState();
 
     return DefaultTabController(
       length: 3,
@@ -70,7 +73,7 @@ class ParentDashboard extends ConsumerWidget {
                   children: [
                     CompetencesTab(curriculum: c, progress: p),
                     HistoryTab(curriculum: c, progress: p),
-                    ProgressTab(curriculum: c, progress: p),
+                    ProgressTab(curriculum: c, progress: p, game: game),
                   ],
                 ),
               ),
@@ -255,10 +258,16 @@ class HistoryTab extends StatelessWidget {
 }
 
 class ProgressTab extends StatelessWidget {
-  const ProgressTab({super.key, required this.curriculum, required this.progress});
+  const ProgressTab({
+    super.key,
+    required this.curriculum,
+    required this.progress,
+    this.game = const GameState(),
+  });
 
   final Curriculum curriculum;
   final ProgressState progress;
+  final GameState game;
 
   @override
   Widget build(BuildContext context) {
@@ -333,6 +342,23 @@ class ProgressTab extends StatelessWidget {
                     ],
                   ),
                 ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Aventure de votre enfant',
+                    style: text.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                Text('Niveau ${game.level} · ${game.xp} XP · ${game.stars} étoile(s)'),
+                Text('Village : ${game.buildingLevels.values.fold<int>(0, (a, b) => a + b)}'
+                    ' / ${buildings.length * kBuildingMaxLevel} niveaux construits'),
               ],
             ),
           ),

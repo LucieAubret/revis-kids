@@ -16,6 +16,8 @@ void main() {
   testWidgets('choisir un thème le sélectionne', (tester) async {
     await tester.pumpWidget(const ProviderScope(child: ReviskidsApp()));
 
+    await tester.ensureVisible(find.text('Danse classique'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Danse classique'));
     await tester.pumpAndSettle();
 
