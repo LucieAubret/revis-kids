@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../ai/api_key.dart';
 import '../../ai/gemini_client.dart';
 import '../../data/ai_settings.dart';
 
@@ -46,7 +47,8 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
 
   Future<void> _test() async {
     final current = ref.read(aiSettingsProvider).value;
-    final key = _keyCtrl.text.trim().isEmpty ? current?.apiKey : _keyCtrl.text.trim();
+    final typed = sanitizeApiKey(_keyCtrl.text);
+    final key = typed.isEmpty ? current?.apiKey : typed;
     if (key == null || key.isEmpty) {
       setState(() {
         _status = "Saisissez d'abord une clé.";
@@ -69,11 +71,23 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
     } on GeminiException catch (e) {
       if (!mounted) return;
       setState(() {
+        final d = e.detail;
         _status = switch (e.kind) {
+          GeminiErrorKind.invalidKey =>
+            'La clé contient des caractères non valides (espace, retour à la ligne, '
+                'guillemets…). Copiez-la à nouveau, sans rien autour.',
           GeminiErrorKind.auth => 'Clé refusée par Google. Vérifiez-la.',
           GeminiErrorKind.quota => 'Quota atteint. Réessayez plus tard.',
-          GeminiErrorKind.network => 'Pas de connexion internet.',
-          _ => 'Le test a échoué (${e.kind.name}). Vérifiez le nom du modèle.',
+          GeminiErrorKind.modelNotFound =>
+            'Le modèle « ${d ?? model} » est introuvable avec cette clé. '
+                'Remplacez-le par $kDefaultGeminiModel.',
+          GeminiErrorKind.network =>
+            'Google est injoignable depuis cet appareil${d == null ? '' : ' ($d)'}. '
+                'Vérifiez le réseau, désactivez un éventuel bloqueur de publicités ou '
+                'antivirus pour ce site, ou essayez dans une fenêtre privée.',
+          GeminiErrorKind.unknown =>
+            'Erreur inattendue${d == null ? '' : ' ($d)'}. Signalez-la telle quelle.',
+          _ => 'Le test a échoué (${e.kind.name}${d == null ? '' : ', $d'}).',
         };
         _statusOk = false;
       });

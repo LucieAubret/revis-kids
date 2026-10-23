@@ -8,12 +8,24 @@ import 'package:http/http.dart' as http;
 import '../core/curriculum.dart';
 import '../core/quest_theme.dart';
 import '../data/ai_settings.dart';
+import 'api_key.dart';
 import '../dictee/dictee_text.dart';
 import 'prompt.dart';
 import 'quest.dart';
 import 'tutor.dart';
 
-enum GeminiErrorKind { noKey, auth, quota, network, blocked, badResponse, server }
+enum GeminiErrorKind {
+  noKey,
+  invalidKey,
+  auth,
+  quota,
+  network,
+  modelNotFound,
+  blocked,
+  badResponse,
+  server,
+  unknown,
+}
 
 class GeminiException implements Exception {
   GeminiException(this.kind, [this.detail]);
@@ -25,6 +37,8 @@ class GeminiException implements Exception {
   String get childMessage => switch (kind) {
         GeminiErrorKind.noKey =>
           "Demande à un parent de préparer l'application dans l'Espace parent.",
+        GeminiErrorKind.invalidKey ||
+        GeminiErrorKind.modelNotFound ||
         GeminiErrorKind.auth =>
           "L'application n'arrive pas à se connecter. Demande à un parent de vérifier la clé.",
         GeminiErrorKind.quota =>
@@ -34,7 +48,8 @@ class GeminiException implements Exception {
         GeminiErrorKind.blocked =>
           "Je ne peux pas analyser cette photo. Essaie avec ta feuille d'exercice.",
         GeminiErrorKind.badResponse ||
-        GeminiErrorKind.server =>
+        GeminiErrorKind.server ||
+        GeminiErrorKind.unknown =>
           "Oups, je n'ai pas réussi à analyser ton exercice. Réessaie !",
       };
 
@@ -68,6 +83,11 @@ class GeminiClient implements QuestGenerator, TutorService, DicteeService {
   Uri get _endpoint => Uri.https(_host, '/v1beta/models/$model:generateContent');
 
   Future<String> _generate(Map<String, dynamic> body) async {
+    // Une clé mal copiée (caractère invisible, espace) rend l'en-tête invalide :
+    // on le dit clairement au lieu de le faire passer pour une panne réseau.
+    if (!isValidKeyFormat(apiKey)) {
+      throw GeminiException(GeminiErrorKind.invalidKey);
+    }
     final http.Response res;
     try {
       res = await _client
@@ -81,15 +101,28 @@ class GeminiClient implements QuestGenerator, TutorService, DicteeService {
           )
           .timeout(const Duration(seconds: 60));
     } on TimeoutException {
-      throw GeminiException(GeminiErrorKind.network, 'timeout');
-    } catch (_) {
-      throw GeminiException(GeminiErrorKind.network);
+      throw GeminiException(GeminiErrorKind.network, 'délai dépassé (60 s)');
+    } on http.ClientException catch (e) {
+      throw GeminiException(GeminiErrorKind.network, e.message);
+    } catch (e) {
+      // Sur mobile et ordinateur, une coupure arrive sous forme d'erreurs système
+      // (SocketException, HandshakeException…) qu'on ne peut pas nommer ici sans
+      // importer dart:io, absent du web : on reconnaît le type par son nom.
+      final type = e.runtimeType.toString();
+      if (RegExp(r'Socket|Handshake|Tls|HttpException|Connection').hasMatch(type)) {
+        throw GeminiException(GeminiErrorKind.network, type);
+      }
+      // Autre cause (ni réseau, ni Google) : on garde son type pour le diagnostic.
+      throw GeminiException(GeminiErrorKind.unknown, type);
     }
 
     // Google répond 400 (et non 401) pour une clé invalide : on lit le motif.
     final invalidKey = res.statusCode == 400 && res.body.contains('API_KEY_INVALID');
     if (res.statusCode == 401 || res.statusCode == 403 || invalidKey) {
       throw GeminiException(GeminiErrorKind.auth, '${res.statusCode}');
+    }
+    if (res.statusCode == 404) {
+      throw GeminiException(GeminiErrorKind.modelNotFound, model);
     }
     if (res.statusCode == 429) throw GeminiException(GeminiErrorKind.quota);
     if (res.statusCode >= 500) {

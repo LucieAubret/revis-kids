@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../ai/api_key.dart';
 import 'progress.dart';
 
 const kDefaultGeminiModel = 'gemini-3.8-flash';
@@ -38,7 +39,7 @@ class AiSettingsNotifier extends AsyncNotifier<AiSettings> {
 
   Future<void> save({required String? apiKey, required String model}) async {
     final prefs = await ref.read(sharedPreferencesProvider.future);
-    final key = apiKey?.trim();
+    final key = apiKey == null ? null : sanitizeApiKey(apiKey);
     final m = model.trim().isEmpty ? kDefaultGeminiModel : model.trim();
     if (key == null || key.isEmpty) {
       await prefs.remove(_keyKey);
