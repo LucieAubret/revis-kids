@@ -1,19 +1,23 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../core/quest_theme.dart';
+import '../../data/progress.dart';
+
 /// Capture de la feuille de devoir (appareil photo ou, à défaut, un fichier).
-class ScanScreen extends StatefulWidget {
+class ScanScreen extends ConsumerStatefulWidget {
   const ScanScreen({super.key, this.picker});
 
   /// Injectable pour les tests.
   final ImagePicker? picker;
 
   @override
-  State<ScanScreen> createState() => _ScanScreenState();
+  ConsumerState<ScanScreen> createState() => _ScanScreenState();
 }
 
-class _ScanScreenState extends State<ScanScreen> {
+class _ScanScreenState extends ConsumerState<ScanScreen> {
   late final ImagePicker _picker = widget.picker ?? ImagePicker();
   Uint8List? _photo;
   String? _message;
@@ -40,6 +44,21 @@ class _ScanScreenState extends State<ScanScreen> {
           "Je n'arrive pas à ouvrir la caméra. Choisis plutôt une photo "
           'enregistrée sur cet appareil.');
     }
+  }
+
+  Future<void> _saveScan() async {
+    final theme = ref.read(questThemeProvider);
+    final now = DateTime.now();
+    await ref.read(progressProvider.notifier).addScan(ScanRecord(
+          id: now.microsecondsSinceEpoch.toString(),
+          date: now,
+          themeLabel: theme.label,
+        ));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('Devoir enregistré ! Ta quête arrive bientôt.'),
+    ));
+    Navigator.of(context).pop();
   }
 
   @override
@@ -114,8 +133,8 @@ class _ScanScreenState extends State<ScanScreen> {
                   if (_photo != null) ...[
                     const SizedBox(height: 16),
                     FilledButton(
-                      onPressed: null,
-                      child: const Text('Lancer ma quête (bientôt)'),
+                      onPressed: _saveScan,
+                      child: const Text('Enregistrer mon devoir'),
                     ),
                   ],
                 ],

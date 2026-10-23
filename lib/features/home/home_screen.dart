@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/quest_theme.dart';
+import '../parent/parent_gate.dart';
 import '../scan/scan_screen.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -24,6 +25,18 @@ class HomeScreen extends ConsumerWidget {
     );
 
     return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        actions: [
+          IconButton(
+            tooltip: 'Espace parent',
+            icon: const Icon(Icons.lock_outline_rounded),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const ParentGate()),
+            ),
+          ),
+        ],
+      ),
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
