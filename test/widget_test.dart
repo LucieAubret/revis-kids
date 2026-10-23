@@ -1,30 +1,38 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-
+import 'package:revis_kids/core/quest_theme.dart';
 import 'package:revis_kids/main.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets("l'accueil propose le scan et les trois thèmes", (tester) async {
+    await tester.pumpWidget(const ProviderScope(child: ReviskidsApp()));
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    expect(find.text('Scanner mon devoir'), findsOneWidget);
+    expect(find.text('Histoire de France'), findsOneWidget);
+    expect(find.text('Danse classique'), findsOneWidget);
+    expect(find.text('Aventures'), findsOneWidget);
+  });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+  testWidgets('choisir un thème le sélectionne', (tester) async {
+    await tester.pumpWidget(const ProviderScope(child: ReviskidsApp()));
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    await tester.tap(find.text('Danse classique'));
+    await tester.pumpAndSettle();
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(ReviskidsApp)),
+    );
+    expect(container.read(questThemeProvider), QuestTheme.danse);
+  });
+
+  testWidgets('le bouton Scanner ouvre l\'écran de capture', (tester) async {
+    await tester.pumpWidget(const ProviderScope(child: ReviskidsApp()));
+
+    await tester.ensureVisible(find.text('Scanner mon devoir'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Scanner mon devoir'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Choisir une photo'), findsOneWidget);
   });
 }
