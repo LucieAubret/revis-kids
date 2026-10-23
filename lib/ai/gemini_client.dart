@@ -10,6 +10,7 @@ import '../core/quest_theme.dart';
 import '../data/ai_settings.dart';
 import 'prompt.dart';
 import 'quest.dart';
+import 'tutor.dart';
 
 enum GeminiErrorKind { noKey, auth, quota, network, blocked, badResponse, server }
 
@@ -52,7 +53,7 @@ abstract class QuestGenerator {
 
 /// Client minimal de l'API Gemini (REST). La clé voyage dans l'en-tête
 /// `x-goog-api-key`, jamais dans l'URL.
-class GeminiClient implements QuestGenerator {
+class GeminiClient implements QuestGenerator, TutorService {
   GeminiClient({required this.apiKey, required this.model, http.Client? client})
       : _client = client ?? http.Client();
 
@@ -168,12 +169,104 @@ class GeminiClient implements QuestGenerator {
       throw GeminiException(GeminiErrorKind.badResponse, 'parse');
     }
   }
+
+  @override
+  Future<Verification> verifyAnswer({
+    required Uint8List image,
+    required String mimeType,
+    required Quest quest,
+    required Competence? competence,
+    required QuestTheme theme,
+    required int attemptNumber,
+  }) async {
+    final text = await _generate({
+      'systemInstruction': {
+        'parts': [
+          {
+            'text': buildVerifyInstruction(
+              quest: quest,
+              competence: competence,
+              theme: theme,
+              attemptNumber: attemptNumber,
+            ),
+          },
+        ],
+      },
+      'contents': [
+        {
+          'role': 'user',
+          'parts': [
+            {'text': "Voici la photo de la réponse de l'élève. Vérifie-la et réponds en JSON."},
+            {
+              'inlineData': {'mimeType': mimeType, 'data': base64Encode(image)},
+            },
+          ],
+        },
+      ],
+      'generationConfig': {'responseMimeType': 'application/json', 'temperature': 0.3},
+    });
+    try {
+      return parseVerification(text);
+    } on TutorParseException {
+      throw GeminiException(GeminiErrorKind.badResponse, 'parse');
+    }
+  }
+
+  @override
+  Future<Capsule> createCapsule({
+    required Quest quest,
+    required Competence? competence,
+    required QuestTheme theme,
+  }) async {
+    final text = await _generate({
+      'systemInstruction': {
+        'parts': [
+          {
+            'text': buildCapsuleInstruction(
+              quest: quest,
+              competence: competence,
+              theme: theme,
+            ),
+          },
+        ],
+      },
+      'contents': [
+        {
+          'role': 'user',
+          'parts': [
+            {'text': 'Écris la capsule « Bon à savoir » et réponds en JSON.'},
+          ],
+        },
+      ],
+      'generationConfig': {'responseMimeType': 'application/json', 'temperature': 0.5},
+    });
+    try {
+      return parseCapsule(text);
+    } on TutorParseException {
+      throw GeminiException(GeminiErrorKind.badResponse, 'parse');
+    }
+  }
 }
 
 /// Générateur de quêtes configuré avec la clé du parent. Lève
 /// [GeminiException] `noKey` tant que la clé n'est pas saisie.
-final questGeneratorProvider = FutureProvider<QuestGenerator>((ref) async {
-  final settings = await ref.watch(aiSettingsProvider.future);
-  if (!settings.hasKey) throw GeminiException(GeminiErrorKind.noKey);
-  return GeminiClient(apiKey: settings.apiKey!, model: settings.model);
-});
+///
+/// `retry: null` : Riverpod 3 réessaie sinon à l'infini un fournisseur en
+/// échec, et l'enfant resterait devant un indicateur de chargement.
+final questGeneratorProvider = FutureProvider<QuestGenerator>(
+  (ref) async {
+    final settings = await ref.watch(aiSettingsProvider.future);
+    if (!settings.hasKey) throw GeminiException(GeminiErrorKind.noKey);
+    return GeminiClient(apiKey: settings.apiKey!, model: settings.model);
+  },
+  retry: (_, _) => null,
+);
+
+final tutorServiceProvider = FutureProvider<TutorService>(
+  (ref) async {
+    final settings = await ref.watch(aiSettingsProvider.future);
+    if (!settings.hasKey) throw GeminiException(GeminiErrorKind.noKey);
+    return GeminiClient(apiKey: settings.apiKey!, model: settings.model);
+  },
+  retry: (_, _) => null,
+);

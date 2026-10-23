@@ -8,6 +8,7 @@ import '../../ai/quest.dart';
 import '../../core/curriculum.dart';
 import '../../core/quest_theme.dart';
 import '../../data/progress.dart';
+import '../tutor/answer_flow_screen.dart';
 
 enum _Phase { loading, error, notExercise, confirm, quest }
 
@@ -279,9 +280,11 @@ class _QuestCard extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 24),
-        const FilledButton(
-          onPressed: null,
-          child: Text('Bientôt : montre-moi ta réponse'),
+        FilledButton(
+          onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+            builder: (_) => AnswerFlowScreen(quest: quest),
+          )),
+          child: const Text("J'ai écrit ma réponse : je la montre"),
         ),
       ],
     );
