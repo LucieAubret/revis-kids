@@ -36,6 +36,9 @@ class Attempt {
       );
 }
 
+const String kindDevoir = 'devoir';
+const String kindDictee = 'dictee';
+
 /// Un devoir scanné. La photo n'est jamais conservée sur l'appareil.
 class ScanRecord {
   const ScanRecord({
@@ -45,6 +48,8 @@ class ScanRecord {
     this.matiereId,
     this.competenceId,
     this.note,
+    this.kind = kindDevoir,
+    this.errors = const {},
   });
 
   final String id;
@@ -56,6 +61,12 @@ class ScanRecord {
   /// Précision donnée avant le scan (« exercice 3 page 45 »).
   final String? note;
 
+  /// [kindDevoir] ou [kindDictee].
+  final String kind;
+
+  /// Pour une dictée : nombre d'erreurs par catégorie (accord, grammaire, lexique, autre).
+  final Map<String, int> errors;
+
   Map<String, dynamic> toJson() => {
         'i': id,
         'd': date.toIso8601String(),
@@ -63,6 +74,8 @@ class ScanRecord {
         'm': matiereId,
         'c': competenceId,
         'n': note,
+        'y': kind,
+        'e': errors,
       };
 
   factory ScanRecord.fromJson(Map<String, dynamic> j) => ScanRecord(
@@ -72,6 +85,8 @@ class ScanRecord {
         matiereId: j['m'] as String?,
         competenceId: j['c'] as String?,
         note: j['n'] as String?,
+        kind: (j['y'] as String?) ?? kindDevoir,
+        errors: Map<String, int>.from((j['e'] as Map?) ?? const {}),
       );
 }
 

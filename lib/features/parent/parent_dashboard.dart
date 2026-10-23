@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/curriculum.dart';
 import '../../data/progress.dart';
+import '../../dictee/dictee_text.dart';
 import '../../game/catalog.dart';
 import '../../game/game_state.dart';
 import 'ai_settings_screen.dart';
@@ -242,14 +243,17 @@ class HistoryTab extends StatelessWidget {
         final s = scans[i];
         final comp = s.competenceId == null ? null : curriculum.competence(s.competenceId!);
         final matiere = s.matiereId == null ? null : curriculum.matiere(s.matiereId!);
+        final isDictee = s.kind == kindDictee;
         return Card(
           child: ListTile(
-            leading: const Icon(Icons.description_outlined),
-            title: Text(comp?.titre ?? 'Compétence à identifier'),
+            leading: Icon(isDictee ? Icons.record_voice_over_rounded : Icons.description_outlined),
+            title: Text(isDictee
+                ? 'Dictée : ${s.note ?? 'sans titre'} — ${_dicteeSummary(s.errors)}'
+                : (comp?.titre ?? 'Compétence à identifier')),
             subtitle: Text(
               '${formatDateTime(s.date)} · ${matiere?.nom ?? 'Matière à identifier'}'
               ' · Univers : ${s.themeLabel}'
-              '${s.note == null ? '' : '\nPrécision : ${s.note}'}',
+              '${(isDictee || s.note == null) ? '' : '\nPrécision : ${s.note}'}',
             ),
           ),
         );
@@ -365,6 +369,10 @@ class ProgressTab extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
+        if (progress.scans.any((x) => x.kind == kindDictee)) ...[
+          _DicteeCard(scans: progress.scans.where((x) => x.kind == kindDictee).toList()),
+          const SizedBox(height: 12),
+        ],
         Card(
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -478,6 +486,69 @@ class _SubjectBar extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// « Sans faute » ou « 3 erreurs (2 accords, 1 lexique) ».
+String _dicteeSummary(Map<String, int> errors) {
+  final total = errors.values.fold<int>(0, (a, b) => a + b);
+  if (total == 0) return 'sans faute';
+  final parts = [
+    for (final c in ErrorCategory.values)
+      if ((errors[c.name] ?? 0) > 0) '${errors[c.name]} ${c.label.toLowerCase()}',
+  ];
+  return '$total erreur${total > 1 ? 's' : ''} (${parts.join(', ')})';
+}
+
+/// Bilan des dictées : nombre, et erreurs cumulées par catégorie, pour
+/// repérer ce qu'il faut retravailler (accords, grammaire, lexique).
+class _DicteeCard extends StatelessWidget {
+  const _DicteeCard({required this.scans});
+
+  final List<ScanRecord> scans;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final totals = {for (final c in ErrorCategory.values) c: 0};
+    for (final s in scans) {
+      for (final c in ErrorCategory.values) {
+        totals[c] = totals[c]! + (s.errors[c.name] ?? 0);
+      }
+    }
+    final totalErrors = totals.values.fold<int>(0, (a, b) => a + b);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Dictées',
+                style: text.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            Text('${scans.length} dictée(s) · $totalErrors erreur(s) au total'),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final c in ErrorCategory.values)
+                  if (c != ErrorCategory.autre || totals[c]! > 0)
+                    Chip(
+                      avatar: CircleAvatar(
+                        backgroundColor: c.color,
+                        child: Text('${totals[c]}',
+                            style: const TextStyle(color: Colors.white, fontSize: 12)),
+                      ),
+                      label: Text(c.label),
+                      side: BorderSide(color: c.color),
+                    ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

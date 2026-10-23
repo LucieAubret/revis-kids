@@ -91,6 +91,23 @@ Reward computeReward({
   );
 }
 
+/// Barème d'une dictée corrigée : moins il y a d'erreurs, plus on gagne,
+/// mais une dictée avec beaucoup d'erreurs rapporte quand même un peu pour
+/// encourager à la refaire.
+Reward computeDicteeReward({required int errors}) {
+  final (xp, stars, mats) = errors == 0
+      ? (30, 3, 2)
+      : errors <= 2
+          ? (20, 2, 1)
+          : (10, 1, 1);
+  return Reward(
+    xp: xp,
+    stars: stars,
+    materialId: materialForMatiere('francais').id,
+    materialCount: mats,
+  );
+}
+
 /// XP gagnés en comprenant une capsule (quiz réussi).
 const int kXpCapsuleComprise = 5;
 

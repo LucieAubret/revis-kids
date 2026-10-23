@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import '../core/curriculum.dart';
 import '../core/quest_theme.dart';
 import '../data/ai_settings.dart';
+import '../dictee/dictee_text.dart';
 import 'prompt.dart';
 import 'quest.dart';
 import 'tutor.dart';
@@ -54,7 +55,7 @@ abstract class QuestGenerator {
 
 /// Client minimal de l'API Gemini (REST). La clé voyage dans l'en-tête
 /// `x-goog-api-key`, jamais dans l'URL.
-class GeminiClient implements QuestGenerator, TutorService {
+class GeminiClient implements QuestGenerator, TutorService, DicteeService {
   GeminiClient({required this.apiKey, required this.model, http.Client? client})
       : _client = client ?? http.Client();
 
@@ -248,6 +249,93 @@ class GeminiClient implements QuestGenerator, TutorService {
       throw GeminiException(GeminiErrorKind.badResponse, 'parse');
     }
   }
+
+  Future<String> _dicteeCall({
+    required String system,
+    required List<Map<String, dynamic>> parts,
+    double temperature = 0.3,
+  }) =>
+      _generate({
+        'systemInstruction': {
+          'parts': [
+            {'text': system},
+          ],
+        },
+        'contents': [
+          {'role': 'user', 'parts': parts},
+        ],
+        'generationConfig': {
+          'responseMimeType': 'application/json',
+          'temperature': temperature,
+        },
+      });
+
+  Map<String, dynamic> _image(Uint8List image, String mimeType) => {
+        'inlineData': {'mimeType': mimeType, 'data': base64Encode(image)},
+      };
+
+  @override
+  Future<DicteeText> extractText({
+    required Uint8List image,
+    required String mimeType,
+  }) async {
+    final text = await _dicteeCall(
+      system: buildExtractDicteeInstruction(),
+      parts: [
+        {'text': 'Voici la photo du texte de la dictée. Recopie-le et réponds en JSON.'},
+        _image(image, mimeType),
+      ],
+      temperature: 0.1,
+    );
+    try {
+      return parseDicteeText(text);
+    } on DicteeParseException {
+      throw GeminiException(GeminiErrorKind.badResponse, 'parse');
+    }
+  }
+
+  @override
+  Future<DicteeText> generateText({
+    required QuestTheme theme,
+    required Curriculum curriculum,
+  }) async {
+    final text = await _dicteeCall(
+      system: buildGenerateDicteeInstruction(curriculum, theme),
+      parts: [
+        {'text': 'Écris la dictée et réponds en JSON.'},
+      ],
+      temperature: 0.8,
+    );
+    try {
+      return parseDicteeText(text);
+    } on DicteeParseException {
+      throw GeminiException(GeminiErrorKind.badResponse, 'parse');
+    }
+  }
+
+  @override
+  Future<DicteeCorrection> correct({
+    required Uint8List image,
+    required String mimeType,
+    required String texteSource,
+    required Curriculum curriculum,
+  }) async {
+    final text = await _dicteeCall(
+      system: buildCorrectDicteeInstruction(
+        texteSource: texteSource,
+        curriculum: curriculum,
+      ),
+      parts: [
+        {'text': "Voici la photo de la dictée écrite par l'élève. Corrige-la et réponds en JSON."},
+        _image(image, mimeType),
+      ],
+    );
+    try {
+      return parseDicteeCorrection(text, curriculum);
+    } on DicteeParseException {
+      throw GeminiException(GeminiErrorKind.badResponse, 'parse');
+    }
+  }
 }
 
 /// Générateur de quêtes configuré avec la clé du parent. Lève
@@ -265,6 +353,15 @@ final questGeneratorProvider = FutureProvider<QuestGenerator>(
 );
 
 final tutorServiceProvider = FutureProvider<TutorService>(
+  (ref) async {
+    final settings = await ref.watch(aiSettingsProvider.future);
+    if (!settings.hasKey) throw GeminiException(GeminiErrorKind.noKey);
+    return GeminiClient(apiKey: settings.apiKey!, model: settings.model);
+  },
+  retry: (_, _) => null,
+);
+
+final dicteeServiceProvider = FutureProvider<DicteeService>(
   (ref) async {
     final settings = await ref.watch(aiSettingsProvider.future);
     if (!settings.hasKey) throw GeminiException(GeminiErrorKind.noKey);

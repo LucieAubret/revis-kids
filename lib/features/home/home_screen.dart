@@ -9,6 +9,7 @@ import '../../ui/game_widgets.dart';
 import '../../ui/mascot.dart';
 import '../../ui/pressable.dart';
 import '../../ui/universe_art.dart';
+import '../dictee/dictee_screen.dart';
 import '../parent/parent_gate.dart';
 import '../scan/scan_screen.dart';
 import '../shop/shop_screen.dart';
@@ -364,6 +365,13 @@ class _Shortcuts extends StatelessWidget {
         onTap: () => _open(context, const VillageScreen()),
       ),
       _ShortcutTile(
+        icon: Icons.record_voice_over_rounded,
+        color: const Color(0xFF7C5CFF),
+        title: 'Dictée magique',
+        subtitle: 'Écoute, écris, corrige',
+        onTap: () => _open(context, const DicteeScreen()),
+      ),
+      _ShortcutTile(
         icon: Icons.storefront_rounded,
         color: const Color(0xFFFF8A3D),
         title: 'Boutique',
@@ -373,11 +381,17 @@ class _Shortcuts extends StatelessWidget {
     ];
     return wide
         ? Row(children: [
-            Expanded(child: tiles[0]),
-            const SizedBox(width: 20),
-            Expanded(child: tiles[1]),
+            for (var i = 0; i < tiles.length; i++) ...[
+              if (i > 0) const SizedBox(width: 20),
+              Expanded(child: tiles[i]),
+            ],
           ])
-        : Column(children: [tiles[0], const SizedBox(height: 14), tiles[1]]);
+        : Column(children: [
+            for (var i = 0; i < tiles.length; i++) ...[
+              if (i > 0) const SizedBox(height: 14),
+              tiles[i],
+            ],
+          ]);
   }
 }
 
