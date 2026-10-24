@@ -96,26 +96,50 @@ void main() {
     });
   });
 
-  group('clé qui n\'est pas une clé Gemini (préfixe « AQ. »)', () {
-    test('reconnaissance du préfixe', () {
-      expect(looksLikeNonGeminiKey('AQ.Ab8RN6-fake'), isTrue);
-      expect(looksLikeNonGeminiKey('AIzaSyA-bcdEFG'), isFalse);
-      expect(looksLikeNonGeminiKey('INVALID-TEST-KEY'), isFalse);
+  group('clés « AQ. » (nouveau format officiel de Google AI Studio)', () {
+    test('une clé AQ. est acceptée comme n\'importe quelle clé et envoyée telle quelle', () async {
+      late http.Request seen;
+      final c = clientWith(
+        MockClient((r) async {
+          seen = r;
+          return http.Response.bytes(
+            utf8.encode(jsonEncode({
+              'candidates': [
+                {
+                  'content': {
+                    'parts': [
+                      {'text': 'ok'},
+                    ],
+                  },
+                },
+              ],
+            })),
+            200,
+          );
+        }),
+        key: kAqKey,
+      );
+      await runTest(c);
+      expect(seen.headers['x-goog-api-key'], kAqKey);
+      expect(isValidKeyFormat(kAqKey), isTrue);
     });
 
-    test('Google répond 401 ACCESS_TOKEN_TYPE_UNSUPPORTED : type de clé erroné', () async {
-      final c = clientWith(MockClient((_) async => http.Response(
-          '{"error":{"code":401,"status":"UNAUTHENTICATED","details":'
-          '[{"reason":"ACCESS_TOKEN_TYPE_UNSUPPORTED"}]}}',
-          401)), key: kAqKey);
+    test('Google répond 401 ACCESS_TOKEN_TYPE_UNSUPPORTED : clé refusée, sans accuser le format', () async {
+      final c = clientWith(
+        MockClient((_) async => http.Response(
+            '{"error":{"code":401,"status":"UNAUTHENTICATED","details":'
+            '[{"reason":"ACCESS_TOKEN_TYPE_UNSUPPORTED"}]}}',
+            401)),
+        key: kAqKey,
+      );
       await expectLater(
         runTest(c),
         throwsA(isA<GeminiException>()
-            .having((e) => e.kind, 'kind', GeminiErrorKind.wrongKeyType)),
+            .having((e) => e.kind, 'kind', GeminiErrorKind.keyRejected)),
       );
     });
 
-    test('Safari masque le 401 (« Load failed ») : une clé AQ. est quand même identifiée', () async {
+    test('« Load failed » de Safari reste une erreur réseau ambiguë, même avec une clé AQ.', () async {
       final c = clientWith(
         MockClient((_) async => throw http.ClientException('Load failed')),
         key: kAqKey,
@@ -123,32 +147,26 @@ void main() {
       await expectLater(
         runTest(c),
         throwsA(isA<GeminiException>()
-            .having((e) => e.kind, 'kind', GeminiErrorKind.wrongKeyType)),
+            .having((e) => e.kind, 'kind', GeminiErrorKind.network)
+            .having((e) => e.detail, 'detail', 'Load failed')),
       );
     });
 
-    test('la liste des modèles passe par la même détection', () async {
+    test('la liste des modèles accepte aussi une clé AQ.', () async {
       final c = clientWith(
-        MockClient((_) async => throw http.ClientException('Load failed')),
+        MockClient((_) async => http.Response(
+            jsonEncode({
+              'models': [
+                {
+                  'name': 'models/gemini-3.8-flash',
+                  'supportedGenerationMethods': ['generateContent'],
+                },
+              ],
+            }),
+            200)),
         key: kAqKey,
       );
-      await expectLater(
-        c.listModels(),
-        throwsA(isA<GeminiException>()
-            .having((e) => e.kind, 'kind', GeminiErrorKind.wrongKeyType)),
-      );
-    });
-
-    test('même « Load failed » avec une clé AIza : vraie panne réseau', () async {
-      final c = clientWith(
-        MockClient((_) async => throw http.ClientException('Load failed')),
-        key: 'AIzaSyA-bcdEFG_hij123',
-      );
-      await expectLater(
-        runTest(c),
-        throwsA(isA<GeminiException>()
-            .having((e) => e.kind, 'kind', GeminiErrorKind.network)),
-      );
+      expect(await c.listModels(), ['gemini-3.8-flash']);
     });
   });
 

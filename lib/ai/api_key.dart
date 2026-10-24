@@ -13,8 +13,3 @@ String sanitizeApiKey(String raw) {
 /// Tout autre caractère rend l'en-tête HTTP invalide.
 bool isValidKeyFormat(String key) =>
     key.isNotEmpty && RegExp(r'^[A-Za-z0-9._~\-]+$').hasMatch(key);
-
-/// Les clés de l'API Gemini (Google AI Studio) commencent par « AIza ». Une clé
-/// commençant par « AQ. » vient d'un autre produit Google (par exemple Vertex AI)
-/// et est rejetée par l'API Gemini avec l'erreur ACCESS_TOKEN_TYPE_UNSUPPORTED.
-bool looksLikeNonGeminiKey(String key) => key.startsWith('AQ.');

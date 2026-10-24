@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../ai/api_key.dart';
@@ -21,6 +22,7 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
   bool _show = false;
   String? _status;
   bool _statusOk = false;
+  GeminiErrorKind? _lastKind;
 
   /// Modèles réellement utilisables avec la clé, une fois la clé reconnue.
   List<String> _models = const [];
@@ -32,11 +34,6 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
     super.dispose();
   }
 
-  static const _wrongKeyType =
-      "Cette clé commence par « AQ. » : ce n'est pas une clé de l'API Gemini, "
-      'qui commence par « AIza ». Créez-en une dans Google AI Studio '
-      '(aistudio.google.com/apikey) avec « Create API key ».';
-
   Future<void> _save() async {
     final notifier = ref.read(aiSettingsProvider.notifier);
     final current = ref.read(aiSettingsProvider).value;
@@ -45,12 +42,10 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
     await notifier.save(apiKey: saved, model: _modelCtrl.text);
     _keyCtrl.clear();
     if (!mounted) return;
-    final suspicious = saved != null && looksLikeNonGeminiKey(sanitizeApiKey(saved));
     setState(() {
-      _status = suspicious
-          ? 'Réglages enregistrés. Attention : $_wrongKeyType'
-          : 'Réglages enregistrés.';
-      _statusOk = !suspicious;
+      _status = 'Réglages enregistrés.';
+      _statusOk = true;
+      _lastKind = null;
     });
   }
 
@@ -62,8 +57,12 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
       GeminiErrorKind.invalidKey =>
         'La clé contient des caractères non valides (espace, retour à la ligne, '
             'guillemets…). Copiez-la à nouveau, sans rien autour.',
-      GeminiErrorKind.wrongKeyType => _wrongKeyType,
-      GeminiErrorKind.auth =>
+      GeminiErrorKind.keyRejected =>
+        "Google ne reconnaît pas cette clé (erreur ACCESS_TOKEN_TYPE_UNSUPPORTED). "
+            'Les clés commençant par « AQ. » sont le nouveau format normal de Google AI Studio, '
+            'mais celle-ci est refusée : elle est peut-être incomplète (copie coupée), supprimée, '
+            "ou créée pour un autre produit (Vertex AI). Recréez-en une dans AI Studio et "
+            'copiez-la en entier. Le diagnostic ci-dessous montre la réponse exacte de Google.',      GeminiErrorKind.auth =>
         'Clé refusée par Google. Vérifiez-la, ou créez-en une nouvelle dans Google AI Studio.',
       GeminiErrorKind.serviceBlocked =>
         "La clé est reconnue, mais l'API Gemini est désactivée ou bloquée pour son projet$more. "
@@ -77,9 +76,10 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
       GeminiErrorKind.modelNotFound =>
         'Le modèle « ${d ?? model} » est introuvable avec cette clé.',
       GeminiErrorKind.network =>
-        'Google est injoignable depuis cet appareil${d == null ? '' : ' ($d)'}. '
-            'Vérifiez le réseau, désactivez un éventuel bloqueur de publicités ou '
-            'antivirus pour ce site, ou essayez dans une fenêtre privée.',
+        'La requête vers Google a échoué${d == null ? '' : ' ($d)'}. Causes possibles : '
+            'réseau coupé, bloqueur de publicités ou antivirus, ou clé refusée par Google '
+            "(Safari affiche alors « Load failed » sans montrer la raison). "
+            'Le diagnostic ci-dessous montre la réponse exacte de Google.',
       GeminiErrorKind.unknown =>
         'Erreur inattendue${d == null ? '' : ' ($d)'}. Signalez-la telle quelle.',
       _ => 'Le test a échoué (${e.kind.name}${d == null ? '' : ', $d'}).',
@@ -115,6 +115,7 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
       setState(() {
         _status = _explain(e, model);
         _statusOk = false;
+        _lastKind = e.kind;
         _busy = false;
       });
       return;
@@ -128,6 +129,7 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
         _status = 'Connexion réussie : la clé et « $model » fonctionnent. '
             'Touchez « Enregistrer » pour les conserver.';
         _statusOk = true;
+        _lastKind = null;
         _models = available.where((m) => m != model).toList();
       });
     } on GeminiException catch (e) {
@@ -136,12 +138,21 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
         _status = 'La clé est valide, mais « $model » ne répond pas. ${_explain(e, model)}'
             '${available.isEmpty ? '' : ' Essayez un autre modèle :'}';
         _statusOk = false;
+        _lastKind = e.kind;
         _models = available.where((m) => m != model).toList();
       });
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
+
+  /// Les erreurs dont la cause exacte n'est pas lisible dans le navigateur.
+  bool _showsDiagnostic(GeminiErrorKind k) => const {
+        GeminiErrorKind.network,
+        GeminiErrorKind.keyRejected,
+        GeminiErrorKind.auth,
+        GeminiErrorKind.unknown,
+      }.contains(k);
 
   void _pick(String model) {
     _modelCtrl.text = model;
@@ -235,6 +246,12 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
                     ),
                   ),
                 ],
+                if (!_statusOk && _lastKind != null && _showsDiagnostic(_lastKind!)) ...[
+                  const SizedBox(height: 12),
+                  _DiagnosticCard(model: _modelCtrl.text.trim().isEmpty
+                      ? kDefaultGeminiModel
+                      : _modelCtrl.text.trim()),
+                ],
                 if (_models.isNotEmpty) ...[
                   const SizedBox(height: 8),
                   Text('Modèles disponibles avec votre clé :', style: text.bodySmall),
@@ -271,6 +288,71 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Aide au diagnostic : depuis le Terminal du Mac, la réponse de Google est
+/// affichée en entier, alors que Safari la masque (« Load failed »). La clé est
+/// lue dans le presse-papiers : elle n'est jamais tapée ni affichée.
+class _DiagnosticCard extends StatelessWidget {
+  const _DiagnosticCard({required this.model});
+
+  final String model;
+
+  String get command =>
+      'curl -s -i "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent" '
+      '-H "Content-Type: application/json" -H "x-goog-api-key: \$(pbpaste)" '
+      '-d \'{"contents":[{"parts":[{"text":"Dis ok"}]}]}\' | head -40';
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return Card(
+      color: const Color(0xFFFFF8E1),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Diagnostic dans le Terminal',
+                style: text.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 8),
+            const Text(
+              '1. Copiez votre clé (⌘C).\n'
+              '2. Ouvrez l\'application Terminal du Mac.\n'
+              '3. Touchez « Copier la commande », collez-la dans le Terminal (⌘V) puis Entrée.\n'
+              'Google répond en toutes lettres. Une ligne « HTTP/2 200 » veut dire que la clé '
+              'fonctionne. La clé n\'apparaît pas dans le résultat.',
+            ),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: SelectableText(
+                command,
+                style: const TextStyle(fontFamily: 'Menlo', fontSize: 12),
+              ),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.copy_rounded),
+              label: const Text('Copier la commande'),
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: command));
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Commande copiée.')),
+                  );
+                }
+              },
+            ),
+          ],
         ),
       ),
     );

@@ -17,7 +17,7 @@ import 'tutor.dart';
 enum GeminiErrorKind {
   noKey,
   invalidKey,
-  wrongKeyType,
+  keyRejected,
   auth,
   quota,
   network,
@@ -41,7 +41,7 @@ class GeminiException implements Exception {
         GeminiErrorKind.noKey =>
           "Demande à un parent de préparer l'application dans l'Espace parent.",
         GeminiErrorKind.invalidKey ||
-        GeminiErrorKind.wrongKeyType ||
+        GeminiErrorKind.keyRejected ||
         GeminiErrorKind.modelNotFound ||
         GeminiErrorKind.serviceBlocked ||
         GeminiErrorKind.permissionDenied ||
@@ -113,11 +113,8 @@ class GeminiClient implements QuestGenerator, TutorService, DicteeService {
     } on TimeoutException {
       throw GeminiException(GeminiErrorKind.network, 'délai dépassé (60 s)');
     } on http.ClientException catch (e) {
-      // Safari affiche « Load failed » quand Google répond 401 à une clé d'un
-      // autre type : le corps de la réponse n'est alors pas lisible.
-      if (looksLikeNonGeminiKey(apiKey)) {
-        throw GeminiException(GeminiErrorKind.wrongKeyType, e.message);
-      }
+      // Safari affiche « Load failed » aussi quand Google répond 401 : le corps
+      // de la réponse est alors illisible. Le détail reste donc ambigu.
       throw GeminiException(GeminiErrorKind.network, e.message);
     } catch (e) {
       // Sur mobile et ordinateur, une coupure arrive sous forme d'erreurs système
@@ -125,9 +122,6 @@ class GeminiClient implements QuestGenerator, TutorService, DicteeService {
       // importer dart:io, absent du web : on reconnaît le type par son nom.
       final type = e.runtimeType.toString();
       if (RegExp(r'Socket|Handshake|Tls|HttpException|Connection').hasMatch(type)) {
-        if (looksLikeNonGeminiKey(apiKey)) {
-          throw GeminiException(GeminiErrorKind.wrongKeyType, type);
-        }
         throw GeminiException(GeminiErrorKind.network, type);
       }
       // Autre cause (ni réseau, ni Google) : on garde son type pour le diagnostic.
@@ -139,7 +133,7 @@ class GeminiClient implements QuestGenerator, TutorService, DicteeService {
     final why = _apiMessage(body);
 
     if (res.statusCode == 401 && res.body.contains('ACCESS_TOKEN_TYPE_UNSUPPORTED')) {
-      throw GeminiException(GeminiErrorKind.wrongKeyType, '401');
+      throw GeminiException(GeminiErrorKind.keyRejected, '401');
     }
     // Google répond 400 (et non 401) pour une clé invalide : on lit le motif.
     if (res.statusCode == 400 && body.contains('API_KEY_INVALID')) {
