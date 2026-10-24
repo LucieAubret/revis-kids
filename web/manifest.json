@@ -1,12 +1,12 @@
 {
-    "name": "revis_kids",
-    "short_name": "revis_kids",
+    "name": "Revis · CM1",
+    "short_name": "Revis",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
-    "orientation": "portrait-primary",
+    "background_color": "#E8F4F1",
+    "theme_color": "#1A6FA8",
+    "description": "Réviser le programme de CM1 en s'amusant.",
+    "orientation": "any",
     "prefer_related_applications": false,
     "icons": [
         {

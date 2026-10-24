@@ -15,7 +15,7 @@ class ReviskidsApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = ref.watch(questThemeProvider);
     return MaterialApp(
-      title: "Revis'Kids",
+      title: 'Revis · CM1',
       debugShowCheckedModeBanner: false,
       theme: theme.toThemeData(),
       home: const HomeScreen(),
