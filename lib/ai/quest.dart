@@ -1,6 +1,9 @@
 import 'dart:convert';
 
+import 'dart:typed_data';
+
 import '../core/curriculum.dart';
+import '../core/quest_theme.dart';
 
 /// Quête scénarisée construite par l'IA à partir de la photo d'un devoir.
 class Quest {
@@ -103,4 +106,15 @@ QuestResult parseQuestResponse(String raw, Curriculum curriculum) {
     lectureIncertaine: j['lecture_incertaine'] == true,
     questionConfirmation: (j['question_de_confirmation'] as String?)?.trim(),
   ));
+}
+
+/// Ce dont l'interface a besoin : facile à remplacer dans les tests.
+abstract class QuestGenerator {
+  Future<QuestResult> createQuest({
+    Uint8List? image,
+    String? mimeType,
+    required QuestTheme theme,
+    required Curriculum curriculum,
+    String? note,
+  });
 }

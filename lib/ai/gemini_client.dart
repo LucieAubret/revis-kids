@@ -8,11 +8,14 @@ import 'package:http/http.dart' as http;
 import '../core/curriculum.dart';
 import '../core/quest_theme.dart';
 import '../data/ai_settings.dart';
+import '../demo/demo_mode.dart';
 import 'api_key.dart';
 import '../dictee/dictee_text.dart';
 import 'prompt.dart';
 import 'exercise.dart';
 import 'quest.dart';
+
+export 'quest.dart' show QuestGenerator;
 import 'tutor.dart';
 
 enum GeminiErrorKind {
@@ -64,16 +67,6 @@ class GeminiException implements Exception {
   String toString() => 'GeminiException($kind${detail == null ? '' : ': $detail'})';
 }
 
-/// Ce dont l'interface a besoin : facile à remplacer dans les tests.
-abstract class QuestGenerator {
-  Future<QuestResult> createQuest({
-    Uint8List? image,
-    String? mimeType,
-    required QuestTheme theme,
-    required Curriculum curriculum,
-    String? note,
-  });
-}
 
 /// Client minimal de l'API Gemini (REST). La clé voyage dans l'en-tête
 /// `x-goog-api-key`, jamais dans l'URL.
@@ -490,6 +483,7 @@ class GeminiClient
 /// échec, et l'enfant resterait devant un indicateur de chargement.
 final questGeneratorProvider = FutureProvider<QuestGenerator>(
   (ref) async {
+    if (await ref.watch(demoModeProvider.future)) return ref.watch(demoAiProvider);
     final settings = await ref.watch(aiSettingsProvider.future);
     if (!settings.hasKey) throw GeminiException(GeminiErrorKind.noKey);
     return GeminiClient(apiKey: settings.apiKey!, model: settings.model);
@@ -499,6 +493,7 @@ final questGeneratorProvider = FutureProvider<QuestGenerator>(
 
 final tutorServiceProvider = FutureProvider<TutorService>(
   (ref) async {
+    if (await ref.watch(demoModeProvider.future)) return ref.watch(demoAiProvider);
     final settings = await ref.watch(aiSettingsProvider.future);
     if (!settings.hasKey) throw GeminiException(GeminiErrorKind.noKey);
     return GeminiClient(apiKey: settings.apiKey!, model: settings.model);
@@ -508,6 +503,7 @@ final tutorServiceProvider = FutureProvider<TutorService>(
 
 final dicteeServiceProvider = FutureProvider<DicteeService>(
   (ref) async {
+    if (await ref.watch(demoModeProvider.future)) return ref.watch(demoAiProvider);
     final settings = await ref.watch(aiSettingsProvider.future);
     if (!settings.hasKey) throw GeminiException(GeminiErrorKind.noKey);
     return GeminiClient(apiKey: settings.apiKey!, model: settings.model);
@@ -523,6 +519,7 @@ final geminiClientFactoryProvider =
 
 final exerciseServiceProvider = FutureProvider<ExerciseService>(
   (ref) async {
+    if (await ref.watch(demoModeProvider.future)) return ref.watch(demoAiProvider);
     final settings = await ref.watch(aiSettingsProvider.future);
     if (!settings.hasKey) throw GeminiException(GeminiErrorKind.noKey);
     return GeminiClient(apiKey: settings.apiKey!, model: settings.model);

@@ -11,6 +11,7 @@ import '../../core/curriculum.dart';
 import '../../core/quest_theme.dart';
 import '../../data/progress.dart';
 import '../../game/game_state.dart';
+import '../../demo/demo_widgets.dart';
 import '../../ui/reward_view.dart';
 import '../scan/photo_capture_view.dart';
 
@@ -414,6 +415,7 @@ class _DefiHeader extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        const DemoVerdictChooser(),
         if (notice != null)
           Container(
             margin: const EdgeInsets.only(bottom: 12),

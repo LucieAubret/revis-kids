@@ -7,6 +7,7 @@ import '../../data/progress.dart';
 import '../../dictee/dictee_text.dart';
 import '../../game/catalog.dart';
 import '../../game/game_state.dart';
+import '../../demo/demo_widgets.dart';
 import 'ai_settings_screen.dart';
 import 'sample_data.dart';
 
@@ -36,7 +37,7 @@ class ParentDashboard extends ConsumerWidget {
       length: 3,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Espace parent'),
+          title: Text(isDemo(ref) ? 'Espace parent · DONNÉES DE DÉMO' : 'Espace parent'),
           backgroundColor: Colors.transparent,
           actions: [
             if (kDebugMode)

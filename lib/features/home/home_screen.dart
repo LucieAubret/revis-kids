@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../ai/prompt.dart';
 import '../../core/quest_theme.dart';
 import '../../data/ai_settings.dart';
+import '../../demo/demo_widgets.dart';
 import '../../game/catalog.dart';
 import '../../game/game_state.dart';
 import '../../ui/fun_background.dart';
@@ -78,7 +79,7 @@ class HomeScreen extends ConsumerWidget {
   }
 }
 
-class _Header extends StatelessWidget {
+class _Header extends ConsumerWidget {
   const _Header({required this.theme, required this.game, required this.wide});
 
   final QuestTheme theme;
@@ -86,10 +87,11 @@ class _Header extends StatelessWidget {
   final bool wide;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Row(
       children: [
         AppLogo(theme: theme, size: wide ? 40 : 34, showName: wide),
+        if (isDemo(ref)) ...[const SizedBox(width: 8), const DemoBadge()],
         const Spacer(),
         LevelBar(xp: game.xp, width: wide ? 110 : 70),
         const SizedBox(width: 10),
@@ -225,7 +227,8 @@ class _MissionPanelState extends ConsumerState<_MissionPanel> {
     final text = Theme.of(context).textTheme;
     final scheme = Theme.of(context).colorScheme;
     final ai = ref.watch(aiSettingsProvider);
-    final notReady = ai.hasValue && !ai.value!.hasKey;
+    final demo = isDemo(ref);
+    final notReady = ai.hasValue && !ai.value!.hasKey && !demo;
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -249,9 +252,14 @@ class _MissionPanelState extends ConsumerState<_MissionPanel> {
               const Flexible(child: SpeechBubble(text: "C'est l'heure de ta mission du jour !")),
             ],
           ),
+          if (demo) ...[
+            const SizedBox(height: 10),
+            const DemoBanner(),
+          ],
           if (notReady) ...[
             const SizedBox(height: 10),
             const _NotReadyBanner(),
+            const DemoOfferButton(),
           ],
           const SizedBox(height: 12),
           TextField(

@@ -5,6 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../ai/api_key.dart';
 import '../../ai/gemini_client.dart';
 import '../../data/ai_settings.dart';
+import '../../data/progress.dart';
+import '../../demo/demo_mode.dart';
+import '../../game/game_state.dart';
 
 /// Réglages du moteur IA, réservés au parent : clé API Gemini et modèle.
 class AiSettingsScreen extends ConsumerStatefulWidget {
@@ -154,6 +157,20 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
         GeminiErrorKind.unknown,
       }.contains(k);
 
+  /// Efface seulement les données de démo : le vrai suivi de l'enfant n'est
+  /// jamais touché.
+  Future<void> _clearDemoData() async {
+    final prefs = await ref.read(sharedPreferencesProvider.future);
+    await prefs.remove(demoProgressKey);
+    await prefs.remove(demoGameKey);
+    ref.invalidate(progressProvider);
+    ref.invalidate(gameProvider);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Données de démo effacées.')),
+    );
+  }
+
   void _pick(String model) {
     _modelCtrl.text = model;
     _test();
@@ -285,6 +302,8 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
                     ),
                   ),
                 ),
+                const SizedBox(height: 16),
+                _DemoCard(onClear: _clearDemoData),
               ],
             ),
           ),
@@ -352,6 +371,49 @@ class _DiagnosticCard extends StatelessWidget {
                 }
               },
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Interrupteur du mode démo : essayer toute l'expérience sans clé Gemini.
+class _DemoCard extends ConsumerWidget {
+  const _DemoCard({required this.onClear});
+
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final on = ref.watch(demoModeProvider).value ?? false;
+    return Card(
+      color: const Color(0xFFF1EBFC),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(8, 8, 8, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SwitchListTile(
+              value: on,
+              onChanged: (v) => ref.read(demoModeProvider.notifier).set(v),
+              title: const Text('Mode démo (sans clé)',
+                  style: TextStyle(fontWeight: FontWeight.w800)),
+              subtitle: const Text(
+                "Essayez toute l'expérience avec une IA simulée : exercices, indices, "
+                'capsule, dictée. Rien n\'est envoyé à Google, et les points de démo '
+                'sont séparés de ceux de votre enfant.',
+              ),
+            ),
+            if (on)
+              Padding(
+                padding: const EdgeInsets.only(left: 16),
+                child: TextButton.icon(
+                  onPressed: onClear,
+                  icon: const Icon(Icons.delete_outline_rounded),
+                  label: const Text('Effacer les données de démo'),
+                ),
+              ),
           ],
         ),
       ),

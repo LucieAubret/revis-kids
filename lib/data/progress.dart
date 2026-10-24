@@ -1,7 +1,10 @@
 import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../demo/demo_mode.dart';
+import 'prefs.dart';
+
+export 'prefs.dart';
 
 enum CompetenceStatus { nonVue, enCours, acquise }
 
@@ -154,23 +157,26 @@ class ProgressState {
   }
 }
 
-final sharedPreferencesProvider = FutureProvider<SharedPreferences>(
-  (ref) => SharedPreferences.getInstance(),
-);
 
 const _progressKey = 'progress_v1';
+
+/// Les données du mode démo sont rangées à part : elles ne se mélangent jamais
+/// avec le vrai suivi de l'enfant, et disparaissent quand on les efface.
+const demoProgressKey = 'demo_progress_v1';
 
 class ProgressNotifier extends AsyncNotifier<ProgressState> {
   @override
   Future<ProgressState> build() async {
     final prefs = await ref.watch(sharedPreferencesProvider.future);
-    return ProgressState.decode(prefs.getString(_progressKey));
+    final demo = await ref.watch(demoModeProvider.future);
+    return ProgressState.decode(prefs.getString(demo ? demoProgressKey : _progressKey));
   }
 
   Future<void> _save(ProgressState next) async {
     state = AsyncData(next);
     final prefs = await ref.read(sharedPreferencesProvider.future);
-    await prefs.setString(_progressKey, next.encode());
+    final demo = await ref.read(demoModeProvider.future);
+    await prefs.setString(demo ? demoProgressKey : _progressKey, next.encode());
   }
 
   Future<ProgressState> _current() async =>

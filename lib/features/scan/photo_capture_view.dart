@@ -1,8 +1,10 @@
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+
+import '../../demo/demo_content.dart';
+import '../../demo/demo_widgets.dart';
 
 typedef PickedPhoto = ({Uint8List bytes, String mimeType});
 
@@ -16,7 +18,10 @@ Future<PickedPhoto?> _defaultPicker({required bool camera}) async {
     imageQuality: 85,
   );
   if (file == null) return null;
-  return (bytes: await file.readAsBytes(), mimeType: file.mimeType ?? 'image/jpeg');
+  return (
+    bytes: await file.readAsBytes(),
+    mimeType: file.mimeType ?? 'image/jpeg',
+  );
 }
 
 final photoPickerProvider = Provider<PhotoPicker>((ref) => _defaultPicker);
@@ -65,9 +70,11 @@ class _PhotoCaptureViewState extends ConsumerState<PhotoCaptureView> {
       setState(() => _photo = photo);
     } catch (_) {
       if (!mounted) return;
-      setState(() => _message =
-          "Je n'arrive pas à ouvrir la caméra. Choisis plutôt une photo "
-          'enregistrée sur cet appareil.');
+      setState(
+        () => _message =
+            "Je n'arrive pas à ouvrir la caméra. Choisis plutôt une photo "
+            'enregistrée sur cet appareil.',
+      );
     }
   }
 
@@ -75,97 +82,127 @@ class _PhotoCaptureViewState extends ConsumerState<PhotoCaptureView> {
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     final scheme = Theme.of(context).colorScheme;
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 720),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (widget.header != null) ...[
-                widget.header!,
-                const SizedBox(height: 16),
-              ],
-              Expanded(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: scheme.primary, width: 2),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: _photo == null
-                      ? Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.description_outlined,
-                                size: 72, color: scheme.primary),
-                            const SizedBox(height: 12),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 16),
-                              child: Text(
-                                widget.emptyHint,
-                                style: text.titleMedium,
-                                textAlign: TextAlign.center,
+    // La page défile : un en-tête haut (sélecteur de démo, rappel du défi) ne
+    // doit jamais faire déborder l'écran ni cacher les boutons.
+    return LayoutBuilder(
+      builder: (context, c) {
+        final previewHeight = (c.maxHeight * 0.36).clamp(170.0, 420.0);
+        return SingleChildScrollView(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 720),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (widget.header != null) ...[
+                      widget.header!,
+                      const SizedBox(height: 16),
+                    ],
+                    SizedBox(
+                      height: previewHeight,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(color: scheme.primary, width: 2),
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: _photo == null
+                            ? Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.description_outlined,
+                                    size: 72,
+                                    color: scheme.primary,
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                    ),
+                                    child: Text(
+                                      widget.emptyHint,
+                                      style: text.titleMedium,
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : Image.memory(
+                                _photo!.bytes,
+                                fit: BoxFit.contain,
+                                errorBuilder: (_, _, _) => const Center(
+                                  child: Padding(
+                                    padding: EdgeInsets.all(16),
+                                    child: Text(
+                                      "Cette photo n'est pas lisible. Choisis-en une autre.",
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ),
+                                ),
                               ),
-                            ),
-                          ],
-                        )
-                      : Image.memory(
-                          _photo!.bytes,
-                          fit: BoxFit.contain,
-                          errorBuilder: (_, _, _) => const Center(
-                            child: Padding(
-                              padding: EdgeInsets.all(16),
-                              child: Text(
-                                "Cette photo n'est pas lisible. Choisis-en une autre.",
-                                textAlign: TextAlign.center,
-                              ),
+                      ),
+                    ),
+                    if (_message != null) ...[
+                      const SizedBox(height: 12),
+                      Text(_message!, style: TextStyle(color: scheme.error)),
+                    ],
+                    if (widget.footer != null) ...[
+                      const SizedBox(height: 12),
+                      widget.footer!,
+                    ],
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      alignment: WrapAlignment.center,
+                      children: [
+                        if (cameraAvailable)
+                          FilledButton.icon(
+                            onPressed: () => _capture(camera: true),
+                            icon: const Icon(Icons.camera_alt_rounded),
+                            label: Text(
+                              _photo == null
+                                  ? 'Prendre en photo'
+                                  : 'Reprendre la photo',
                             ),
                           ),
+                        OutlinedButton.icon(
+                          onPressed: () => _capture(camera: false),
+                          icon: const Icon(Icons.photo_library_rounded),
+                          label: const Text('Choisir une photo'),
                         ),
-                ),
-              ),
-              if (_message != null) ...[
-                const SizedBox(height: 12),
-                Text(_message!, style: TextStyle(color: scheme.error)),
-              ],
-              if (widget.footer != null) ...[
-                const SizedBox(height: 12),
-                widget.footer!,
-              ],
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                alignment: WrapAlignment.center,
-                children: [
-                  if (cameraAvailable)
-                    FilledButton.icon(
-                      onPressed: () => _capture(camera: true),
-                      icon: const Icon(Icons.camera_alt_rounded),
-                      label: Text(
-                          _photo == null ? 'Prendre en photo' : 'Reprendre la photo'),
+                      ],
                     ),
-                  OutlinedButton.icon(
-                    onPressed: () => _capture(camera: false),
-                    icon: const Icon(Icons.photo_library_rounded),
-                    label: const Text('Choisir une photo'),
-                  ),
-                ],
-              ),
-              if (_photo != null) ...[
-                const SizedBox(height: 16),
-                FilledButton(
-                  onPressed: () => widget.onConfirm(_photo!.bytes, _photo!.mimeType),
-                  child: Text(widget.confirmLabel),
+                    if (_photo == null && isDemo(ref)) ...[
+                      const SizedBox(height: 8),
+                      TextButton.icon(
+                        onPressed: () => widget.onConfirm(kDemoSamplePhoto, 'image/png'),
+                        icon: const Icon(Icons.science_rounded),
+                        label: const Text('Continuer sans photo (démo)'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: const Color(0xFF7C4DDB),
+                        ),
+                      ),
+                    ],
+                    if (_photo != null) ...[
+                      const SizedBox(height: 16),
+                      FilledButton(
+                        onPressed: () =>
+                            widget.onConfirm(_photo!.bytes, _photo!.mimeType),
+                        child: Text(widget.confirmLabel),
+                      ),
+                    ],
+                  ],
                 ),
-              ],
-            ],
+              ),
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }

@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/progress.dart';
+import '../demo/demo_mode.dart';
 import 'catalog.dart';
 
 /// Points d'expérience nécessaires pour atteindre le niveau [level] (niveau 1 = 0).
@@ -206,12 +207,14 @@ BuildResult checkUpgrade({
 }
 
 const _gameKey = 'game_v1';
+const demoGameKey = 'demo_game_v1';
 
 class GameNotifier extends AsyncNotifier<GameState> {
   @override
   Future<GameState> build() async {
     final prefs = await ref.watch(sharedPreferencesProvider.future);
-    return GameState.decode(prefs.getString(_gameKey));
+    final demo = await ref.watch(demoModeProvider.future);
+    return GameState.decode(prefs.getString(demo ? demoGameKey : _gameKey));
   }
 
   Future<GameState> _current() async => state.value ?? await future;
@@ -219,7 +222,8 @@ class GameNotifier extends AsyncNotifier<GameState> {
   Future<void> _save(GameState next) async {
     state = AsyncData(next);
     final prefs = await ref.read(sharedPreferencesProvider.future);
-    await prefs.setString(_gameKey, next.encode());
+    final demo = await ref.read(demoModeProvider.future);
+    await prefs.setString(demo ? demoGameKey : _gameKey, next.encode());
   }
 
   /// Ajoute les gains d'un défi réussi et renvoie la récompense finale

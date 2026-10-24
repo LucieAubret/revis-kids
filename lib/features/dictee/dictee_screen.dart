@@ -7,6 +7,7 @@ import '../../ai/gemini_client.dart';
 import '../../core/curriculum.dart';
 import '../../core/quest_theme.dart';
 import '../../data/progress.dart';
+import '../../demo/demo_widgets.dart';
 import '../../dictee/dictee_text.dart';
 import '../../dictee/speech.dart';
 import '../../game/game_state.dart';
@@ -318,7 +319,13 @@ class _DicteeScreenState extends ConsumerState<DicteeScreen> {
         ),
       _Phase.capture => PhotoCaptureView(
           key: const ValueKey('capture-dictee'),
-          header: _notice == null ? null : _Banner(text: _notice!),
+          header: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const DemoDicteeChooser(),
+              if (_notice != null) _Banner(text: _notice!),
+            ],
+          ),
           emptyHint: 'Prends en photo ta dictée écrite sur ton cahier.',
           confirmLabel: 'Corriger ma dictée',
           onConfirm: _correct,
