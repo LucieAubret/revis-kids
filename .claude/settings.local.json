@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xcode-select -p)",
+      "Read(//Library/Developer/CommandLineTools/usr/bin/**)",
+      "Bash(git --version)",
+      "Bash(xcode-select -p 2>&1; git --version 2>&1 | head -1; ls ~/Desktop | head -30)",
+      "Bash(curl -s -o /dev/null http://localhost:8080)",
+      "Bash(break)",
+      "Read(//private/tmp/**)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:8080)",
+      "WebSearch",
+      "WebFetch(domain:www.education.gouv.fr)",
+      "WebFetch(domain:eduscol.education.gouv.fr)",
+      "Bash(mkdir -p /private/tmp/claude-502/-Users-lucieaubret-Library-Application-Support-Claude-scratch-workspaces-f76c2e36-edec-422b-b8d0-7b529a38e392-7815cd14-26bc-434d-bd83-9a5e1d517060-scratch-2026-10-23-d8d895/f1cf7887-9b83-4db3-9f82-0c3b164b005c/scratchpad/programmes)",
+      "Bash(curl -sL -A \"Mozilla/5.0\" -o francais.pdf \"https://www.education.gouv.fr/sites/default/files/programme-de-fran-ais-pour-le-cycle-3-439824.pdf\")",
+      "Bash(curl -sL -A \"Mozilla/5.0\" -o maths.pdf \"https://www.education.gouv.fr/sites/default/files/programme-de-math-matiques-pour-le-cycle-3-439827.pdf\")",
+      "Bash(file *.pdf)",
+      "Bash(python3 -c \"import pypdf\")",
+      "Bash(grep -n -E \"\\(Cours moyen première|Cours moyen deuxième|Sixième$|^Sommaire|^Nombres|^Calcul|^Grandeurs|^Espace|^Organisation|^Résolution|^Automatismes\\)\" maths.txt)",
+      "Bash(curl -sL -A \"Mozilla/5.0\" -o histgeo.pdf \"https://www.education.gouv.fr/sites/default/files/document/annexe-4-programme-d-histoire-geographie-cycle-3-516779.pdf\")",
+      "Bash(swift /private/tmp/claude-502/pdf2txt.swift histgeo.pdf)",
+      "Bash(python3 -)",
+      "Bash(curl -s -m 30 -X POST \"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent\" -H \"Content-Type: application/json\" -H \"x-goog-api-key: INVALID-TEST-KEY\" -d '{\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\":\"ok\"}]}]}')",
+      "Bash(cd ~/.pub-cache/hosted/pub.dev/flutter_tts-4.2.5 2>/dev/null && ls lib; grep -n \"setSpeechRate\" -B2 -A12 lib/flutter_tts.dart | head -60; echo ---; grep -rn \"rate\" lib/flutter_tts_web.dart | head; grep -n \"platforms\" -A12 pubspec.yaml | head -20)",
+      "Bash(curl -s -i -X OPTIONS \"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent\" -H \"Origin: http://localhost:8080\" -H \"Access-Control-Request-Method: POST\" -H \"Access-Control-Request-Headers: content-type,x-goog-api-key\" -m 20)",
+      "Bash(curl -s -i -X POST \"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent\" -H \"Origin: http://localhost:8080\" -H \"Content-Type: application/json\" -H \"x-goog-api-key: INVALID-TEST-KEY\" -d '{\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\":\"ok\"}]}]}' -m 20)",
+      "Bash(curl -s -m 25 -X POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent -H 'Content-Type: application/json' -H 'x-goog-api-key: AQ.Ab8RN6FakeFakeFakeFakeFakeFakeFakeFakeFakeFake' -d '{\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\":\"ok\"}]}]}')",
+      "Bash(python3 -c \"import sys,json; j=json.load\\(sys.stdin\\); e=j.get\\('error',{}\\); print\\('code',e.get\\('code'\\),'|',e.get\\('status'\\),'|',e.get\\('message',''\\)[:140]\\); print\\('raison:',[d.get\\('reason'\\) for d in e.get\\('details',[]\\) if 'reason' in d]\\)\")",
+      "Bash(curl -s -m 25 -X POST \"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent\" -H \"Content-Type: application/json\" -H \"x-goog-api-key: AIzaSyFakeFakeFakeFakeFakeFakeFakeFake123\" -d '{\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\":\"ok\"}]}]}')",
+      "Bash(python3 -c \"import sys,json; j=json.load\\(sys.stdin\\); e=j.get\\('error',{}\\); print\\('code',e.get\\('code'\\),'|',e.get\\('status'\\),'|',e.get\\('message',''\\)[:100]\\)\")",
+      "WebFetch(domain:discuss.ai.google.dev)",
+      "WebFetch(domain:forum.cursor.com)",
+      "Bash(curl -s -i -X POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent -H 'Origin: http://localhost:8080' -H 'Content-Type: application/json' -H 'x-goog-api-key: AQ.Fake-key_123' -d '{\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\":\"ok\"}]}]}' -m 20)",
+      "Bash(cd ~/.pub-cache/hosted/pub.dev/speech_to_text-7.5.0/lib && grep -n \"class SpeechListenOptions\" -A40 speech_to_text.dart | grep -n \"final\\\\|SpeechListenOptions\\(\" | head -20)",
+      "Bash(sed -n 58,125p ~/.pub-cache/hosted/pub.dev/speech_to_text_platform_interface-2.5.0/lib/speech_to_text_platform_interface.dart | grep -v \"^\\\\s*///\" )",
+      "Bash(grep -n '\\\\\\\\\\\\$' lib/ai/prompt.dart)",
+      "Bash(gh --version)"
+    ]
+  }
+}
