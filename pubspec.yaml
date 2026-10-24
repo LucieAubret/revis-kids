@@ -40,6 +40,7 @@ dependencies:
   crypto: ^3.0.7
   http: ^1.6.0
   flutter_tts: ^4.2.5
+  speech_to_text: ^7.5.0
 
 dev_dependencies:
   flutter_test:
@@ -67,9 +68,9 @@ flutter:
     - assets/curriculum/cm1.json
 
   fonts:
-    - family: Fredoka
+    - family: Outfit
       fonts:
-        - asset: assets/fonts/Fredoka.ttf
+        - asset: assets/fonts/Outfit.ttf
     - family: Nunito
       fonts:
         - asset: assets/fonts/Nunito.ttf

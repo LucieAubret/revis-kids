@@ -16,7 +16,8 @@ import 'package:revis_kids/data/ai_settings.dart';
 import 'package:revis_kids/data/progress.dart';
 import 'package:revis_kids/features/quest/quest_flow_screen.dart';
 import 'package:revis_kids/features/scan/photo_capture_view.dart';
-import 'package:revis_kids/features/scan/scan_screen.dart';
+import 'package:revis_kids/main.dart';
+import 'package:revis_kids/voice/voice_input.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 late Curriculum curriculum;
@@ -144,7 +145,7 @@ void main() {
       expect(cleanNote('   '), isNull);
       expect(cleanNote(null), isNull);
       expect(cleanNote('  exercice   3\n page 45 '), 'exercice 3 page 45');
-      expect(cleanNote('a' * 500)!.length, kNoteMaxLength);
+      expect(cleanNote('a' * 3000)!.length, kNoteMaxLength);
     });
 
     test("elle est transmise à l'IA comme une donnée, jamais une instruction", () {
@@ -354,75 +355,202 @@ void main() {
 final _png = base64Decode(
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==');
 
+class _FakeVoice implements VoiceInput {
+  _FakeVoice({this.available = true});
+
+  final bool available;
+  bool listening = false;
+  void Function(String, {required bool isFinal})? _onText;
+  void Function()? _onDone;
+
+  void say(String words, {bool isFinal = false}) => _onText?.call(words, isFinal: isFinal);
+
+  @override
+  Future<bool> init() async => available;
+
+  @override
+  bool get isListening => listening;
+
+  @override
+  Future<void> start({
+    required void Function(String text, {required bool isFinal}) onText,
+    required void Function() onDone,
+    required void Function(String message) onError,
+  }) async {
+    if (!available) {
+      onError("La dictée vocale n'est pas disponible ici.");
+      onDone();
+      return;
+    }
+    listening = true;
+    _onText = onText;
+    _onDone = onDone;
+  }
+
+  @override
+  Future<void> stop() async {
+    listening = false;
+    _onDone?.call();
+  }
+}
+
 void scanScreenTests() {
-  group('page de scan', () {
-    Future<ProviderContainer> openScan(
+  group("panneau « Ma mission du jour » de l'accueil", () {
+    Future<(ProviderContainer, _FakeVoice)> openHome(
       WidgetTester tester, {
       bool withKey = true,
       _FakeGenerator? generator,
+      bool voice = true,
     }) async {
       SharedPreferences.resetStatic();
       SharedPreferences.setMockInitialValues({
         if (withKey) 'gemini_api_key': 'TEST-KEY-123456',
       });
       final prefs = await SharedPreferences.getInstance();
+      final fakeVoice = _FakeVoice(available: voice);
       final container = ProviderContainer(overrides: [
         sharedPreferencesProvider.overrideWith((ref) async => prefs),
         curriculumProvider.overrideWith((ref) async => curriculum),
-        if (generator != null)
-          questGeneratorProvider.overrideWith((ref) async => generator),
+        voiceInputProvider.overrideWithValue(fakeVoice),
+        if (generator != null) questGeneratorProvider.overrideWith((ref) async => generator),
         photoPickerProvider.overrideWithValue(
           ({required bool camera}) async => (bytes: _png, mimeType: 'image/png'),
         ),
       ]);
       addTearDown(container.dispose);
-      await tester.pumpWidget(UncontrolledProviderScope(
-        container: container,
-        child: const MaterialApp(home: ScanScreen()),
-      ));
-      for (var i = 0; i < 4; i++) {
+      await tester.pumpWidget(
+        UncontrolledProviderScope(container: container, child: const ReviskidsApp()),
+      );
+      for (var i = 0; i < 5; i++) {
         await tester.pump(const Duration(milliseconds: 100));
       }
-      return container;
+      return (container, fakeVoice);
     }
 
-    testWidgets('le bouton s\'appelle « Lancer la recherche » et le champ existe', (tester) async {
-      await openScan(tester);
-      expect(find.text("De quel exercice s'agit-il ?"), findsOneWidget);
-      await tester.tap(find.text('Choisir une photo'));
-      await tester.pump(const Duration(milliseconds: 100));
+    Future<void> settle(WidgetTester tester) async {
+      for (var i = 0; i < 8; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+    }
+
+    testWidgets('le scan est sur la première page, bouton de lancement inactif au départ',
+        (tester) async {
+      await openHome(tester);
+      expect(find.text('Scanner mon devoir'), findsOneWidget);
       expect(find.text('Lancer la recherche'), findsOneWidget);
+      final btn = tester.widget<FilledButton>(find.ancestor(
+        of: find.text('Lancer la recherche'),
+        matching: find.byType(FilledButton),
+      ));
+      expect(btn.onPressed, isNull);
       expect(find.textContaining('quête'), findsNothing);
     });
 
-    testWidgets('sans clé : un bandeau prévient avant le scan', (tester) async {
-      await openScan(tester, withKey: false);
+    testWidgets('sans clé : un bandeau prévient dès la première page', (tester) async {
+      await openHome(tester, withKey: false);
       expect(find.textContaining("La recherche n'est pas encore prête"), findsOneWidget);
       expect(find.textContaining('Moteur IA'), findsOneWidget);
     });
 
     testWidgets('avec une clé : pas de bandeau', (tester) async {
-      await openScan(tester);
+      await openHome(tester);
       expect(find.textContaining("n'est pas encore prête"), findsNothing);
     });
 
-    testWidgets("la précision saisie part à l'IA et reste dans l'historique", (tester) async {
-      final gen = _FakeGenerator(
-          parseQuestResponse(jsonEncode(questJson()), curriculum));
-      final c = await openScan(tester, generator: gen);
+    testWidgets("on peut écrire l'exercice, sans photo", (tester) async {
+      final gen = _FakeGenerator(parseQuestResponse(jsonEncode(questJson()), curriculum));
+      final c = await openHome(tester, generator: gen);
 
-      await tester.enterText(find.byType(TextField), '  exercice 3 page 45  ');
-      await tester.tap(find.text('Choisir une photo'));
-      await tester.pump(const Duration(milliseconds: 100));
+      await tester.enterText(find.byType(TextField), '  exercice 3 page 45, les fractions  ');
+      await tester.pump();
       await tester.tap(find.text('Lancer la recherche'));
-      for (var i = 0; i < 8; i++) {
-        await tester.pump(const Duration(milliseconds: 100));
-      }
+      await settle(tester);
 
+      expect(gen.lastImage, isNull);
       expect(gen.lastNote, contains('exercice 3 page 45'));
       expect(find.text('Le trésor des quarts'), findsOneWidget);
-      final scans = (await c.read(progressProvider.future)).scans;
-      expect(scans.single.note, 'exercice 3 page 45');
+      final scans = (await c.$1.read(progressProvider.future)).scans;
+      expect(scans.single.note, 'exercice 3 page 45, les fractions');
+    });
+
+    testWidgets("on peut écrire un long texte (jusqu'à $kNoteMaxLength caractères)", (tester) async {
+      final gen = _FakeGenerator(parseQuestResponse(jsonEncode(questJson()), curriculum));
+      await openHome(tester, generator: gen);
+
+      final long = 'Calcule la somme de ces fractions. ' * 30;
+      await tester.enterText(find.byType(TextField), long);
+      await tester.pump();
+      await tester.tap(find.text('Lancer la recherche'));
+      await settle(tester);
+
+      expect(gen.lastNote!.length, greaterThan(300));
+    });
+
+    testWidgets("photo et précision partent ensemble à l'IA", (tester) async {
+      final gen = _FakeGenerator(parseQuestResponse(jsonEncode(questJson()), curriculum));
+      await openHome(tester, generator: gen);
+
+      await tester.tap(find.text('Scanner mon devoir'));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.bySemanticsLabel('Photo prête'), findsOneWidget);
+      await tester.enterText(find.byType(TextField), 'exercice 4');
+      await tester.pump();
+      await tester.tap(find.text('Lancer la recherche'));
+      await settle(tester);
+
+      expect(gen.lastImage, isNotNull);
+      expect(gen.lastNote, 'exercice 4');
+    });
+
+    testWidgets('la photo seule suffit, et on peut la retirer', (tester) async {
+      await openHome(tester);
+      await tester.tap(find.text('Scanner mon devoir'));
+      await tester.pump(const Duration(milliseconds: 100));
+      var btn = tester.widget<FilledButton>(find.ancestor(
+        of: find.text('Lancer la recherche'),
+        matching: find.byType(FilledButton),
+      ));
+      expect(btn.onPressed, isNotNull);
+
+      await tester.tap(find.byIcon(Icons.cancel_rounded));
+      await tester.pump(const Duration(milliseconds: 100));
+      btn = tester.widget<FilledButton>(find.ancestor(
+        of: find.text('Lancer la recherche'),
+        matching: find.byType(FilledButton),
+      ));
+      expect(btn.onPressed, isNull);
+    });
+
+    testWidgets('le micro dicte le texte, qui complète ce qui est déjà écrit', (tester) async {
+      final (_, voice) = await openHome(tester);
+      await tester.enterText(find.byType(TextField), 'Exercice 5');
+      await tester.pump();
+
+      await tester.tap(find.byTooltip('Dicter à voix haute'));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(voice.listening, isTrue);
+      expect(find.text("Je t'écoute…"), findsOneWidget);
+
+      voice.say('calcule trois quarts');
+      await tester.pump();
+      voice.say('calcule trois quarts plus un quart', isFinal: true);
+      await tester.pump();
+      expect(find.text('Exercice 5 calcule trois quarts plus un quart'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Arrêter la dictée'));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(voice.listening, isFalse);
+      expect(find.text("Je t'écoute…"), findsNothing);
+    });
+
+    testWidgets("micro indisponible : message clair, l'écriture reste possible", (tester) async {
+      await openHome(tester, voice: false);
+      await tester.tap(find.byTooltip('Dicter à voix haute'));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.textContaining("n'est pas disponible"), findsOneWidget);
+      await tester.enterText(find.byType(TextField), 'ok');
+      await tester.pump();
+      expect(find.text('ok'), findsOneWidget);
     });
   });
 }
@@ -434,16 +562,18 @@ class _FakeGenerator implements QuestGenerator {
   final QuestResult? _result;
   final GeminiException? _error;
   String? lastNote;
+  Uint8List? lastImage;
 
   @override
   Future<QuestResult> createQuest({
-    required Uint8List image,
-    required String mimeType,
+    Uint8List? image,
+    String? mimeType,
     required QuestTheme theme,
     required Curriculum curriculum,
     String? note,
   }) async {
     lastNote = note;
+    lastImage = image;
     if (_error != null) throw _error;
     return _result!;
   }

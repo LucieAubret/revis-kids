@@ -38,6 +38,7 @@ class Attempt {
 
 const String kindDevoir = 'devoir';
 const String kindDictee = 'dictee';
+const String kindExercice = 'exercice';
 
 /// Un devoir scanné. La photo n'est jamais conservée sur l'appareil.
 class ScanRecord {
@@ -61,7 +62,7 @@ class ScanRecord {
   /// Précision donnée avant le scan (« exercice 3 page 45 »).
   final String? note;
 
-  /// [kindDevoir] ou [kindDictee].
+  /// [kindDevoir], [kindDictee] ou [kindExercice].
   final String kind;
 
   /// Pour une dictée : nombre d'erreurs par catégorie (accord, grammaire, lexique, autre).

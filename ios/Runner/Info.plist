@@ -66,5 +66,13 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Le micro sert à dicter la description d'un exercice à voix haute.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>La reconnaissance vocale transforme ta voix en texte pour décrire un exercice.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>L'appareil photo sert à photographier un exercice, une dictée ou une réponse écrite sur le cahier.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Tu peux choisir une photo d'exercice déjà enregistrée sur l'appareil.</string>
 </dict>
 </plist>

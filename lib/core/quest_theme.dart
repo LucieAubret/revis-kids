@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-const String kHeadingFont = 'Fredoka';
+const String kHeadingFont = 'Outfit';
 const String kBodyFont = 'Nunito';
 
 /// Univers d'aventure choisi par l'élève : il habille l'interface et la quête.
@@ -11,30 +11,30 @@ enum QuestTheme {
     short: 'Chevaliers',
     tagline: 'Châteaux, rois et chevaliers',
     icon: Icons.castle_rounded,
-    seed: Color(0xFFD9542B),
-    background: Color(0xFFFFF1DC),
-    gradient: [Color(0xFFFF8A4C), Color(0xFFD9382B)],
-    accent: Color(0xFFFFC94A),
+    seed: Color(0xFFB8402C),
+    background: Color(0xFFFBF1E6),
+    gradient: [Color(0xFFE0703C), Color(0xFF9C2F3F)],
+    accent: Color(0xFFF2B84B),
   ),
   danse(
     label: 'Danse classique',
     tagline: 'Scène, rideaux et grands spectacles',
     short: 'Scène',
     icon: Icons.theater_comedy_rounded,
-    seed: Color(0xFFD6358F),
-    background: Color(0xFFFFE9F4),
-    gradient: [Color(0xFFFF7FBF), Color(0xFF9B3DDB)],
-    accent: Color(0xFFFFD84D),
+    seed: Color(0xFFB83A8E),
+    background: Color(0xFFF8EEF8),
+    gradient: [Color(0xFFE45A9B), Color(0xFF6C3BC4)],
+    accent: Color(0xFFF6C85F),
   ),
   aventures(
     label: 'Aventures',
     tagline: 'Îles, cartes au trésor et expéditions',
     short: 'Trésors',
     icon: Icons.map_rounded,
-    seed: Color(0xFF12907A),
-    background: Color(0xFFE3F8EE),
-    gradient: [Color(0xFF3CCB8B), Color(0xFF0E7C9B)],
-    accent: Color(0xFFFFB938),
+    seed: Color(0xFF0F8A78),
+    background: Color(0xFFE8F4F1),
+    gradient: [Color(0xFF2BB6A0), Color(0xFF1A6FA8)],
+    accent: Color(0xFFF0A93B),
   );
 
   const QuestTheme({
@@ -67,7 +67,7 @@ enum QuestTheme {
     TextStyle heading(double size, {double? height}) => TextStyle(
           fontFamily: kHeadingFont,
           fontSize: size,
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.w700,
           height: height ?? 1.15,
           color: ink,
         );
@@ -97,7 +97,7 @@ enum QuestTheme {
       labelSmall: body(12, weight: FontWeight.w700),
     );
 
-    const radius = BorderRadius.all(Radius.circular(24));
+    const radius = BorderRadius.all(Radius.circular(20));
 
     return ThemeData(
       useMaterial3: true,

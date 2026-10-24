@@ -215,7 +215,7 @@ void main() {
       await tester.pumpWidget(app(c));
       await settle(tester);
 
-      expect(find.text('Prêt pour ta mission du jour ?'), findsOneWidget);
+      expect(find.text("C'est l'heure de ta mission du jour !"), findsOneWidget);
       expect(find.text('Scanner mon devoir'), findsOneWidget);
       expect(find.text('Histoire de France'), findsOneWidget);
       expect(find.text('Danse classique'), findsOneWidget);

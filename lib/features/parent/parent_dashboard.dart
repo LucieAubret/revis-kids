@@ -244,16 +244,19 @@ class HistoryTab extends StatelessWidget {
         final comp = s.competenceId == null ? null : curriculum.competence(s.competenceId!);
         final matiere = s.matiereId == null ? null : curriculum.matiere(s.matiereId!);
         final isDictee = s.kind == kindDictee;
+        final isExercice = s.kind == kindExercice;
         return Card(
           child: ListTile(
             leading: Icon(isDictee ? Icons.record_voice_over_rounded : Icons.description_outlined),
             title: Text(isDictee
                 ? 'Dictée : ${s.note ?? 'sans titre'} — ${_dicteeSummary(s.errors)}'
-                : (comp?.titre ?? 'Compétence à identifier')),
+                : isExercice
+                    ? 'Exercice : ${comp?.titre ?? 'notion du programme'}'
+                    : (comp?.titre ?? 'Compétence à identifier')),
             subtitle: Text(
               '${formatDateTime(s.date)} · ${matiere?.nom ?? 'Matière à identifier'}'
               ' · Univers : ${s.themeLabel}'
-              '${(isDictee || s.note == null) ? '' : '\nPrécision : ${s.note}'}',
+              '${(isDictee || isExercice || s.note == null) ? '' : '\nPrécision : ${s.note}'}',
             ),
           ),
         );

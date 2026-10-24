@@ -11,6 +11,7 @@ import '../data/ai_settings.dart';
 import 'api_key.dart';
 import '../dictee/dictee_text.dart';
 import 'prompt.dart';
+import 'exercise.dart';
 import 'quest.dart';
 import 'tutor.dart';
 
@@ -66,8 +67,8 @@ class GeminiException implements Exception {
 /// Ce dont l'interface a besoin : facile à remplacer dans les tests.
 abstract class QuestGenerator {
   Future<QuestResult> createQuest({
-    required Uint8List image,
-    required String mimeType,
+    Uint8List? image,
+    String? mimeType,
     required QuestTheme theme,
     required Curriculum curriculum,
     String? note,
@@ -76,7 +77,8 @@ abstract class QuestGenerator {
 
 /// Client minimal de l'API Gemini (REST). La clé voyage dans l'en-tête
 /// `x-goog-api-key`, jamais dans l'URL.
-class GeminiClient implements QuestGenerator, TutorService, DicteeService {
+class GeminiClient
+    implements QuestGenerator, TutorService, DicteeService, ExerciseService {
   GeminiClient({required this.apiKey, required this.model, http.Client? client})
       : _client = client ?? http.Client();
 
@@ -241,8 +243,8 @@ class GeminiClient implements QuestGenerator, TutorService, DicteeService {
 
   @override
   Future<QuestResult> createQuest({
-    required Uint8List image,
-    required String mimeType,
+    Uint8List? image,
+    String? mimeType,
     required QuestTheme theme,
     required Curriculum curriculum,
     String? note,
@@ -257,10 +259,14 @@ class GeminiClient implements QuestGenerator, TutorService, DicteeService {
         {
           'role': 'user',
           'parts': [
-            {'text': questRequestText(note)},
-            {
-              'inlineData': {'mimeType': mimeType, 'data': base64Encode(image)},
-            },
+            {'text': questRequestText(note, hasImage: image != null)},
+            if (image != null)
+              {
+                'inlineData': {
+                  'mimeType': mimeType ?? 'image/jpeg',
+                  'data': base64Encode(image),
+                },
+              },
           ],
         },
       ],
@@ -439,6 +445,42 @@ class GeminiClient implements QuestGenerator, TutorService, DicteeService {
       throw GeminiException(GeminiErrorKind.badResponse, 'parse');
     }
   }
+
+  @override
+  Future<Quest> generateExercise({
+    required Competence competence,
+    required QuestTheme theme,
+    required ExerciseLevel level,
+  }) async {
+    final text = await _generate({
+      'systemInstruction': {
+        'parts': [
+          {
+            'text': buildExerciseInstruction(
+              competence: competence,
+              theme: theme,
+              level: level,
+              variation: DateTime.now().microsecondsSinceEpoch % 10000,
+            ),
+          },
+        ],
+      },
+      'contents': [
+        {
+          'role': 'user',
+          'parts': [
+            {'text': "Crée l'exercice et réponds en JSON."},
+          ],
+        },
+      ],
+      'generationConfig': {'responseMimeType': 'application/json', 'temperature': 0.9},
+    });
+    try {
+      return parseExercise(text, competence);
+    } on QuestParseException {
+      throw GeminiException(GeminiErrorKind.badResponse, 'parse');
+    }
+  }
 }
 
 /// Générateur de quêtes configuré avec la clé du parent. Lève
@@ -477,4 +519,13 @@ final dicteeServiceProvider = FutureProvider<DicteeService>(
 final geminiClientFactoryProvider =
     Provider<GeminiClient Function(String apiKey, String model)>(
   (ref) => (apiKey, model) => GeminiClient(apiKey: apiKey, model: model),
+);
+
+final exerciseServiceProvider = FutureProvider<ExerciseService>(
+  (ref) async {
+    final settings = await ref.watch(aiSettingsProvider.future);
+    if (!settings.hasKey) throw GeminiException(GeminiErrorKind.noKey);
+    return GeminiClient(apiKey: settings.apiKey!, model: settings.model);
+  },
+  retry: (_, _) => null,
 );

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../ai/exercise.dart';
 import '../../ai/gemini_client.dart';
 import '../../ai/prompt.dart';
 import '../../ai/quest.dart';
@@ -18,13 +19,20 @@ enum _Phase { loading, error, notExercise, confirm, quest }
 class QuestFlowScreen extends ConsumerStatefulWidget {
   const QuestFlowScreen({
     super.key,
-    required this.photo,
-    required this.mimeType,
+    this.photo,
+    this.mimeType,
     this.note,
+    this.competence,
+    this.level = ExerciseLevel.moyen,
   });
 
-  final Uint8List photo;
-  final String mimeType;
+  /// Photo de l'exercice. Sans photo, la description écrite ou dictée suffit.
+  final Uint8List? photo;
+  final String? mimeType;
+
+  /// Notion choisie dans le programme : l'IA invente alors un exercice dessus.
+  final Competence? competence;
+  final ExerciseLevel level;
 
   /// Précision de l'élève sur l'exercice à traiter (peut être vide).
   final String? note;
@@ -51,9 +59,21 @@ class _QuestFlowScreenState extends ConsumerState<QuestFlowScreen> {
       _errorMessage = null;
     });
     try {
+      final theme = ref.read(questThemeProvider);
+      final competence = widget.competence;
+      if (competence != null) {
+        final service = await ref.read(exerciseServiceProvider.future);
+        _quest = await service.generateExercise(
+          competence: competence,
+          theme: theme,
+          level: widget.level,
+        );
+        if (!mounted) return;
+        await _showQuest();
+        return;
+      }
       final curriculum = await ref.read(curriculumProvider.future);
       final generator = await ref.read(questGeneratorProvider.future);
-      final theme = ref.read(questThemeProvider);
       final result = await generator.createQuest(
         image: widget.photo,
         mimeType: widget.mimeType,
@@ -100,6 +120,7 @@ class _QuestFlowScreenState extends ConsumerState<QuestFlowScreen> {
           matiereId: quest.matiereId,
           competenceId: quest.competenceId,
           note: cleanNote(widget.note),
+          kind: widget.competence != null ? kindExercice : kindDevoir,
         ));
     if (!mounted) return;
     setState(() => _phase = _Phase.quest);
@@ -109,7 +130,7 @@ class _QuestFlowScreenState extends ConsumerState<QuestFlowScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Ma recherche'),
+        title: Text(widget.competence != null ? 'Mon exercice' : 'Ma recherche'),
         backgroundColor: Colors.transparent,
       ),
       body: SafeArea(
@@ -119,7 +140,11 @@ class _QuestFlowScreenState extends ConsumerState<QuestFlowScreen> {
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(24),
               child: switch (_phase) {
-                _Phase.loading => const _Loading(),
+                _Phase.loading => _Loading(
+                    text: widget.competence != null
+                        ? 'Je prépare ton exercice…'
+                        : 'Je cherche ton exercice…',
+                  ),
                 _Phase.error => _Message(
                     icon: Icons.cloud_off_rounded,
                     text: _errorMessage ?? '',
@@ -128,9 +153,12 @@ class _QuestFlowScreenState extends ConsumerState<QuestFlowScreen> {
                   ),
                 _Phase.notExercise => _Message(
                     icon: Icons.search_off_rounded,
-                    text: "Je ne vois pas d'exercice sur cette photo. "
-                        'Pose ta feuille bien à plat et reprends-la.',
-                    actionLabel: 'Reprendre la photo',
+                    text: widget.photo == null
+                        ? "Je n'ai pas bien compris cet exercice. Ajoute des détails "
+                            'ou une photo, puis réessaie.'
+                        : "Je ne vois pas d'exercice sur cette photo. "
+                            'Pose ta feuille bien à plat et reprends-la.',
+                    actionLabel: widget.photo == null ? 'Modifier' : 'Reprendre la photo',
                     onAction: () => Navigator.of(context).pop(),
                   ),
                 _Phase.confirm => _Confirm(
@@ -149,17 +177,19 @@ class _QuestFlowScreenState extends ConsumerState<QuestFlowScreen> {
 }
 
 class _Loading extends StatelessWidget {
-  const _Loading();
+  const _Loading({required this.text});
+
+  final String text;
 
   @override
   Widget build(BuildContext context) {
-    return const Column(
+    return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        SizedBox(height: 80),
-        CircularProgressIndicator(),
-        SizedBox(height: 24),
-        Text('Je cherche ton exercice…', style: TextStyle(fontSize: 20)),
+        const SizedBox(height: 80),
+        const CircularProgressIndicator(),
+        const SizedBox(height: 24),
+        Text(text, style: const TextStyle(fontSize: 20)),
       ],
     );
   }

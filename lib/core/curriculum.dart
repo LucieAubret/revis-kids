@@ -10,6 +10,7 @@ class Competence {
     required this.objectifs,
     required this.matiereId,
     required this.domaineNom,
+    this.ecrit = true,
   });
 
   final String id;
@@ -17,6 +18,10 @@ class Competence {
   final List<String> objectifs;
   final String matiereId;
   final String domaineNom;
+
+  /// Faux pour une notion qui se travaille à l'oral (lecture à voix haute,
+  /// expression orale…) : un exercice écrit n'aurait pas de sens.
+  final bool ecrit;
 }
 
 class Domaine {
@@ -53,6 +58,7 @@ class Curriculum {
       final domaines = <Domaine>[];
       for (final d in m['domaines'] as List) {
         final nom = d['nom'] as String;
+        final domaineEcrit = d['verifiable_par_photo'] != false;
         domaines.add(Domaine(
           id: d['id'] as String,
           nom: nom,
@@ -64,6 +70,7 @@ class Curriculum {
                 objectifs: List<String>.from(c['objectifs'] as List),
                 matiereId: matiereId,
                 domaineNom: nom,
+                ecrit: domaineEcrit && c['verifiable_par_photo'] != false,
               ),
           ],
         ));

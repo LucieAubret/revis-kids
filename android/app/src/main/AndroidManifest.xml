@@ -1,4 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Accès à Google (analyse des devoirs) : absent par défaut en version finale. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Saisie vocale de la description d'un exercice. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <application
         android:label="revis_kids"
         android:name="${applicationName}"
@@ -40,6 +44,9 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+        <intent>
+            <action android:name="android.speech.RecognitionService"/>
         </intent>
     </queries>
 </manifest>
