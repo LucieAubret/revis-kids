@@ -32,19 +32,25 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
     super.dispose();
   }
 
+  static const _wrongKeyType =
+      "Cette clé commence par « AQ. » : ce n'est pas une clé de l'API Gemini, "
+      'qui commence par « AIza ». Créez-en une dans Google AI Studio '
+      '(aistudio.google.com/apikey) avec « Create API key ».';
+
   Future<void> _save() async {
     final notifier = ref.read(aiSettingsProvider.notifier);
     final current = ref.read(aiSettingsProvider).value;
     final typed = _keyCtrl.text.trim();
-    await notifier.save(
-      apiKey: typed.isEmpty ? current?.apiKey : typed,
-      model: _modelCtrl.text,
-    );
+    final saved = typed.isEmpty ? current?.apiKey : sanitizeApiKey(typed);
+    await notifier.save(apiKey: saved, model: _modelCtrl.text);
     _keyCtrl.clear();
     if (!mounted) return;
+    final suspicious = saved != null && looksLikeNonGeminiKey(sanitizeApiKey(saved));
     setState(() {
-      _status = 'Réglages enregistrés.';
-      _statusOk = true;
+      _status = suspicious
+          ? 'Réglages enregistrés. Attention : $_wrongKeyType'
+          : 'Réglages enregistrés.';
+      _statusOk = !suspicious;
     });
   }
 
@@ -56,6 +62,7 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
       GeminiErrorKind.invalidKey =>
         'La clé contient des caractères non valides (espace, retour à la ligne, '
             'guillemets…). Copiez-la à nouveau, sans rien autour.',
+      GeminiErrorKind.wrongKeyType => _wrongKeyType,
       GeminiErrorKind.auth =>
         'Clé refusée par Google. Vérifiez-la, ou créez-en une nouvelle dans Google AI Studio.',
       GeminiErrorKind.serviceBlocked =>

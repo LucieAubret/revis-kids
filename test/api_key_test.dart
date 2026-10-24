@@ -7,7 +7,10 @@ import 'package:http/testing.dart';
 import 'package:revis_kids/ai/api_key.dart';
 import 'package:revis_kids/ai/gemini_client.dart';
 
-GeminiClient clientWith(MockClient m, {String key = 'AQ.Ab8RN6-fake_Key.123'}) =>
+const kAizaKey = 'AIzaSyA-fake_Key.123';
+const kAqKey = 'AQ.Ab8RN6-fake_Key.123';
+
+GeminiClient clientWith(MockClient m, {String key = kAizaKey}) =>
     GeminiClient(apiKey: key, model: 'gemini-test', client: m);
 
 Future<void> runTest(GeminiClient c) => c.testConnection();
@@ -78,7 +81,7 @@ void main() {
 
       expect(seen.method, 'GET');
       expect(seen.url.path, '/v1beta/models');
-      expect(seen.headers['x-goog-api-key'], 'AQ.Ab8RN6-fake_Key.123');
+      expect(seen.headers['x-goog-api-key'], kAizaKey);
       expect(seen.url.toString(), isNot(contains('AQ.')));
       expect(models, ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.8-flash-lite', 'gemini-3.8-pro', 'gemini-3.9-flash-preview']);
     });
@@ -89,6 +92,62 @@ void main() {
       await expectLater(
         c.listModels(),
         throwsA(isA<GeminiException>().having((e) => e.kind, 'kind', GeminiErrorKind.auth)),
+      );
+    });
+  });
+
+  group('clé qui n\'est pas une clé Gemini (préfixe « AQ. »)', () {
+    test('reconnaissance du préfixe', () {
+      expect(looksLikeNonGeminiKey('AQ.Ab8RN6-fake'), isTrue);
+      expect(looksLikeNonGeminiKey('AIzaSyA-bcdEFG'), isFalse);
+      expect(looksLikeNonGeminiKey('INVALID-TEST-KEY'), isFalse);
+    });
+
+    test('Google répond 401 ACCESS_TOKEN_TYPE_UNSUPPORTED : type de clé erroné', () async {
+      final c = clientWith(MockClient((_) async => http.Response(
+          '{"error":{"code":401,"status":"UNAUTHENTICATED","details":'
+          '[{"reason":"ACCESS_TOKEN_TYPE_UNSUPPORTED"}]}}',
+          401)), key: kAqKey);
+      await expectLater(
+        runTest(c),
+        throwsA(isA<GeminiException>()
+            .having((e) => e.kind, 'kind', GeminiErrorKind.wrongKeyType)),
+      );
+    });
+
+    test('Safari masque le 401 (« Load failed ») : une clé AQ. est quand même identifiée', () async {
+      final c = clientWith(
+        MockClient((_) async => throw http.ClientException('Load failed')),
+        key: kAqKey,
+      );
+      await expectLater(
+        runTest(c),
+        throwsA(isA<GeminiException>()
+            .having((e) => e.kind, 'kind', GeminiErrorKind.wrongKeyType)),
+      );
+    });
+
+    test('la liste des modèles passe par la même détection', () async {
+      final c = clientWith(
+        MockClient((_) async => throw http.ClientException('Load failed')),
+        key: kAqKey,
+      );
+      await expectLater(
+        c.listModels(),
+        throwsA(isA<GeminiException>()
+            .having((e) => e.kind, 'kind', GeminiErrorKind.wrongKeyType)),
+      );
+    });
+
+    test('même « Load failed » avec une clé AIza : vraie panne réseau', () async {
+      final c = clientWith(
+        MockClient((_) async => throw http.ClientException('Load failed')),
+        key: 'AIzaSyA-bcdEFG_hij123',
+      );
+      await expectLater(
+        runTest(c),
+        throwsA(isA<GeminiException>()
+            .having((e) => e.kind, 'kind', GeminiErrorKind.network)),
       );
     });
   });
@@ -170,7 +229,7 @@ void main() {
         );
       }));
       await runTest(c);
-      expect(seen.headers['x-goog-api-key'], 'AQ.Ab8RN6-fake_Key.123');
+      expect(seen.headers['x-goog-api-key'], kAizaKey);
     });
 
     test('403 « API désactivée » : service bloqué, avec le motif de Google', () async {
