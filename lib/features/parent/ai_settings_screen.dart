@@ -22,6 +22,9 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
   String? _status;
   bool _statusOk = false;
 
+  /// Modèles réellement utilisables avec la clé, une fois la clé reconnue.
+  List<String> _models = const [];
+
   @override
   void dispose() {
     _keyCtrl.dispose();
@@ -45,6 +48,37 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
     });
   }
 
+  /// Texte clair pour chaque cause possible, avec le motif donné par Google.
+  String _explain(GeminiException e, String model) {
+    final d = e.detail;
+    final more = (d == null || d.isEmpty) ? '' : ' (Google : $d)';
+    return switch (e.kind) {
+      GeminiErrorKind.invalidKey =>
+        'La clé contient des caractères non valides (espace, retour à la ligne, '
+            'guillemets…). Copiez-la à nouveau, sans rien autour.',
+      GeminiErrorKind.auth =>
+        'Clé refusée par Google. Vérifiez-la, ou créez-en une nouvelle dans Google AI Studio.',
+      GeminiErrorKind.serviceBlocked =>
+        "La clé est reconnue, mais l'API Gemini est désactivée ou bloquée pour son projet$more. "
+            'Dans Google AI Studio, créez la clé pour « Gemini API », ou activez '
+            '« Generative Language API » dans le projet.',
+      GeminiErrorKind.permissionDenied =>
+        'La clé est reconnue, mais elle n\'a pas le droit d\'utiliser « $model »$more.',
+      GeminiErrorKind.quota =>
+        'Quota atteint pour « $model »$more. Essayez un autre modèle ou activez la '
+            'facturation dans Google AI Studio.',
+      GeminiErrorKind.modelNotFound =>
+        'Le modèle « ${d ?? model} » est introuvable avec cette clé.',
+      GeminiErrorKind.network =>
+        'Google est injoignable depuis cet appareil${d == null ? '' : ' ($d)'}. '
+            'Vérifiez le réseau, désactivez un éventuel bloqueur de publicités ou '
+            'antivirus pour ce site, ou essayez dans une fenêtre privée.',
+      GeminiErrorKind.unknown =>
+        'Erreur inattendue${d == null ? '' : ' ($d)'}. Signalez-la telle quelle.',
+      _ => 'Le test a échoué (${e.kind.name}${d == null ? '' : ', $d'}).',
+    };
+  }
+
   Future<void> _test() async {
     final current = ref.read(aiSettingsProvider).value;
     final typed = sanitizeApiKey(_keyCtrl.text);
@@ -53,47 +87,58 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
       setState(() {
         _status = "Saisissez d'abord une clé.";
         _statusOk = false;
+        _models = const [];
       });
       return;
     }
     final model = _modelCtrl.text.trim().isEmpty ? kDefaultGeminiModel : _modelCtrl.text.trim();
+    final client = ref.read(geminiClientFactoryProvider)(key, model);
     setState(() {
       _busy = true;
       _status = null;
+      _models = const [];
     });
+
+    // Étape 1 : la clé elle-même, indépendamment du modèle.
+    List<String> available;
     try {
-      await GeminiClient(apiKey: key, model: model).testConnection();
+      available = await client.listModels();
+    } on GeminiException catch (e) {
       if (!mounted) return;
       setState(() {
-        _status = 'Connexion réussie.';
+        _status = _explain(e, model);
+        _statusOk = false;
+        _busy = false;
+      });
+      return;
+    }
+
+    // Étape 2 : le modèle choisi répond-il vraiment ?
+    try {
+      await client.testConnection();
+      if (!mounted) return;
+      setState(() {
+        _status = 'Connexion réussie : la clé et « $model » fonctionnent. '
+            'Touchez « Enregistrer » pour les conserver.';
         _statusOk = true;
+        _models = available.where((m) => m != model).toList();
       });
     } on GeminiException catch (e) {
       if (!mounted) return;
       setState(() {
-        final d = e.detail;
-        _status = switch (e.kind) {
-          GeminiErrorKind.invalidKey =>
-            'La clé contient des caractères non valides (espace, retour à la ligne, '
-                'guillemets…). Copiez-la à nouveau, sans rien autour.',
-          GeminiErrorKind.auth => 'Clé refusée par Google. Vérifiez-la.',
-          GeminiErrorKind.quota => 'Quota atteint. Réessayez plus tard.',
-          GeminiErrorKind.modelNotFound =>
-            'Le modèle « ${d ?? model} » est introuvable avec cette clé. '
-                'Remplacez-le par $kDefaultGeminiModel.',
-          GeminiErrorKind.network =>
-            'Google est injoignable depuis cet appareil${d == null ? '' : ' ($d)'}. '
-                'Vérifiez le réseau, désactivez un éventuel bloqueur de publicités ou '
-                'antivirus pour ce site, ou essayez dans une fenêtre privée.',
-          GeminiErrorKind.unknown =>
-            'Erreur inattendue${d == null ? '' : ' ($d)'}. Signalez-la telle quelle.',
-          _ => 'Le test a échoué (${e.kind.name}${d == null ? '' : ', $d'}).',
-        };
+        _status = 'La clé est valide, mais « $model » ne répond pas. ${_explain(e, model)}'
+            '${available.isEmpty ? '' : ' Essayez un autre modèle :'}';
         _statusOk = false;
+        _models = available.where((m) => m != model).toList();
       });
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  void _pick(String model) {
+    _modelCtrl.text = model;
+    _test();
   }
 
   @override
@@ -181,6 +226,22 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
                           ? const Color(0xFF2E7D32)
                           : Theme.of(context).colorScheme.error,
                     ),
+                  ),
+                ],
+                if (_models.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text('Modèles disponibles avec votre clé :', style: text.bodySmall),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final m in _models)
+                        ActionChip(
+                          label: Text(m),
+                          onPressed: _busy ? null : () => _pick(m),
+                        ),
+                    ],
                   ),
                 ],
                 const SizedBox(height: 28),

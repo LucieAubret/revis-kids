@@ -208,7 +208,7 @@ void main() {
       }
 
       expect((await failWith(401)).kind, GeminiErrorKind.auth);
-      expect((await failWith(403)).kind, GeminiErrorKind.auth);
+      expect((await failWith(403)).kind, GeminiErrorKind.permissionDenied);
       expect((await failWith(429)).kind, GeminiErrorKind.quota);
       expect((await failWith(503)).kind, GeminiErrorKind.server);
       expect((await failWith(400)).kind, GeminiErrorKind.badResponse);

@@ -20,6 +20,8 @@ enum GeminiErrorKind {
   auth,
   quota,
   network,
+  serviceBlocked,
+  permissionDenied,
   modelNotFound,
   blocked,
   badResponse,
@@ -39,6 +41,8 @@ class GeminiException implements Exception {
           "Demande à un parent de préparer l'application dans l'Espace parent.",
         GeminiErrorKind.invalidKey ||
         GeminiErrorKind.modelNotFound ||
+        GeminiErrorKind.serviceBlocked ||
+        GeminiErrorKind.permissionDenied ||
         GeminiErrorKind.auth =>
           "L'application n'arrive pas à se connecter. Demande à un parent de vérifier la clé.",
         GeminiErrorKind.quota =>
@@ -82,7 +86,20 @@ class GeminiClient implements QuestGenerator, TutorService, DicteeService {
 
   Uri get _endpoint => Uri.https(_host, '/v1beta/models/$model:generateContent');
 
-  Future<String> _generate(Map<String, dynamic> body) async {
+  /// Message d'erreur renvoyé par Google dans le corps de la réponse, raccourci.
+  static String? _apiMessage(String body) {
+    try {
+      final m = (jsonDecode(body) as Map)['error']?['message'] as String?;
+      if (m == null) return null;
+      final one = m.replaceAll(RegExp(r'\s+'), ' ').trim();
+      return one.length > 160 ? '${one.substring(0, 160)}…' : one;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Envoie une requête et traduit tous les refus de Google en erreurs claires.
+  Future<http.Response> _send(Future<http.Response> Function() call) async {
     // Une clé mal copiée (caractère invisible, espace) rend l'en-tête invalide :
     // on le dit clairement au lieu de le faire passer pour une panne réseau.
     if (!isValidKeyFormat(apiKey)) {
@@ -90,16 +107,7 @@ class GeminiClient implements QuestGenerator, TutorService, DicteeService {
     }
     final http.Response res;
     try {
-      res = await _client
-          .post(
-            _endpoint,
-            headers: {
-              'Content-Type': 'application/json',
-              'x-goog-api-key': apiKey,
-            },
-            body: jsonEncode(body),
-          )
-          .timeout(const Duration(seconds: 60));
+      res = await call().timeout(const Duration(seconds: 60));
     } on TimeoutException {
       throw GeminiException(GeminiErrorKind.network, 'délai dépassé (60 s)');
     } on http.ClientException catch (e) {
@@ -116,21 +124,76 @@ class GeminiClient implements QuestGenerator, TutorService, DicteeService {
       throw GeminiException(GeminiErrorKind.unknown, type);
     }
 
+    if (res.statusCode == 200) return res;
+    final body = res.body;
+    final why = _apiMessage(body);
+
     // Google répond 400 (et non 401) pour une clé invalide : on lit le motif.
-    final invalidKey = res.statusCode == 400 && res.body.contains('API_KEY_INVALID');
-    if (res.statusCode == 401 || res.statusCode == 403 || invalidKey) {
-      throw GeminiException(GeminiErrorKind.auth, '${res.statusCode}');
+    if (res.statusCode == 400 && body.contains('API_KEY_INVALID')) {
+      throw GeminiException(GeminiErrorKind.auth, '400');
     }
-    if (res.statusCode == 404) {
-      throw GeminiException(GeminiErrorKind.modelNotFound, model);
+    if (res.statusCode == 401) throw GeminiException(GeminiErrorKind.auth, why);
+    if (res.statusCode == 403) {
+      // L'API Gemini désactivée ou interdite pour le projet de la clé.
+      if (RegExp(r'SERVICE_DISABLED|API_KEY_SERVICE_BLOCKED|has not been used in project|is disabled')
+          .hasMatch(body)) {
+        throw GeminiException(GeminiErrorKind.serviceBlocked, why);
+      }
+      throw GeminiException(GeminiErrorKind.permissionDenied, why);
     }
-    if (res.statusCode == 429) throw GeminiException(GeminiErrorKind.quota);
+    if (res.statusCode == 404) throw GeminiException(GeminiErrorKind.modelNotFound, model);
+    if (res.statusCode == 429) throw GeminiException(GeminiErrorKind.quota, why);
     if (res.statusCode >= 500) {
       throw GeminiException(GeminiErrorKind.server, '${res.statusCode}');
     }
-    if (res.statusCode != 200) {
-      throw GeminiException(GeminiErrorKind.badResponse, '${res.statusCode}');
+    throw GeminiException(GeminiErrorKind.badResponse, '${res.statusCode}${why == null ? '' : ' : $why'}');
+  }
+
+  /// Modèles utilisables avec cette clé (génération de texte et d'images en
+  /// entrée), pour proposer un autre modèle si celui par défaut est refusé.
+  /// Valide aussi la clé elle-même, indépendamment du modèle.
+  Future<List<String>> listModels() async {
+    final res = await _send(() => _client.get(
+          Uri.https(_host, '/v1beta/models', {'pageSize': '100'}),
+          headers: {'x-goog-api-key': apiKey},
+        ));
+    try {
+      final j = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
+      final out = <String>[];
+      for (final m in (j['models'] as List? ?? const [])) {
+        final name = (m['name'] as String? ?? '').replaceFirst('models/', '');
+        final methods = List<String>.from(m['supportedGenerationMethods'] as List? ?? const []);
+        if (!name.startsWith('gemini')) continue;
+        if (!methods.contains('generateContent')) continue;
+        if (RegExp(r'embedding|tts|image|live|audio|robotics|computer|aqa|learnlm|deep-research')
+            .hasMatch(name)) {
+          continue;
+        }
+        out.add(name);
+      }
+      // Les modèles « flash » rapides et stables d'abord, les préversions à la fin.
+      int rank(String n) =>
+          (n.contains('flash') && !n.contains('lite') ? 0 : n.contains('pro') ? 2 : 1) +
+          (RegExp(r'preview|exp|latest').hasMatch(n) ? 10 : 0);
+      out.sort((a, b) {
+        final r = rank(a).compareTo(rank(b));
+        return r != 0 ? r : b.compareTo(a);
+      });
+      return out.take(8).toList();
+    } catch (_) {
+      throw GeminiException(GeminiErrorKind.badResponse, 'liste illisible');
     }
+  }
+
+  Future<String> _generate(Map<String, dynamic> body) async {
+    final res = await _send(() => _client.post(
+          _endpoint,
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': apiKey,
+          },
+          body: jsonEncode(body),
+        ));
 
     try {
       final j = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
@@ -401,4 +464,10 @@ final dicteeServiceProvider = FutureProvider<DicteeService>(
     return GeminiClient(apiKey: settings.apiKey!, model: settings.model);
   },
   retry: (_, _) => null,
+);
+
+/// Fabrique de clients, remplaçable dans les tests (écran de réglages).
+final geminiClientFactoryProvider =
+    Provider<GeminiClient Function(String apiKey, String model)>(
+  (ref) => (apiKey, model) => GeminiClient(apiKey: apiKey, model: model),
 );

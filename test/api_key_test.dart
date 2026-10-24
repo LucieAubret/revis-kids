@@ -49,6 +49,50 @@ void main() {
     });
   });
 
+  group('modèles disponibles avec la clé', () {
+    http.Response modelsReply() => http.Response(
+          jsonEncode({
+            'models': [
+              {'name': 'models/gemini-3.6-flash', 'supportedGenerationMethods': ['generateContent']},
+              {'name': 'models/gemini-3.8-flash', 'supportedGenerationMethods': ['generateContent', 'countTokens']},
+              {'name': 'models/gemini-3.8-pro', 'supportedGenerationMethods': ['generateContent']},
+              {'name': 'models/gemini-3.8-flash-lite', 'supportedGenerationMethods': ['generateContent']},
+              {'name': 'models/gemini-3.9-flash-preview', 'supportedGenerationMethods': ['generateContent']},
+              {'name': 'models/gemini-embedding-001', 'supportedGenerationMethods': ['embedContent']},
+              {'name': 'models/gemini-3.8-flash-image', 'supportedGenerationMethods': ['generateContent']},
+              {'name': 'models/gemini-3.8-flash-tts', 'supportedGenerationMethods': ['generateContent']},
+              {'name': 'models/imagen-4', 'supportedGenerationMethods': ['predict']},
+              {'name': 'models/text-bison', 'supportedGenerationMethods': ['generateContent']},
+            ],
+          }),
+          200,
+        );
+
+    test("liste filtrée : seulement des modèles Gemini de texte, les rapides d'abord", () async {
+      late http.Request seen;
+      final c = clientWith(MockClient((r) async {
+        seen = r;
+        return modelsReply();
+      }));
+      final models = await c.listModels();
+
+      expect(seen.method, 'GET');
+      expect(seen.url.path, '/v1beta/models');
+      expect(seen.headers['x-goog-api-key'], 'AQ.Ab8RN6-fake_Key.123');
+      expect(seen.url.toString(), isNot(contains('AQ.')));
+      expect(models, ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.8-flash-lite', 'gemini-3.8-pro', 'gemini-3.9-flash-preview']);
+    });
+
+    test('la liste valide aussi la clé : clé refusée = erreur claire', () async {
+      final c = clientWith(MockClient((_) async => http.Response(
+          '{"error":{"code":400,"details":[{"reason":"API_KEY_INVALID"}]}}', 400)));
+      await expectLater(
+        c.listModels(),
+        throwsA(isA<GeminiException>().having((e) => e.kind, 'kind', GeminiErrorKind.auth)),
+      );
+    });
+  });
+
   group('diagnostic précis du test de connexion', () {
     test('clé invalide : on le dit, sans envoyer de requête', () async {
       var calls = 0;
@@ -127,6 +171,55 @@ void main() {
       }));
       await runTest(c);
       expect(seen.headers['x-goog-api-key'], 'AQ.Ab8RN6-fake_Key.123');
+    });
+
+    test('403 « API désactivée » : service bloqué, avec le motif de Google', () async {
+      final c = clientWith(MockClient((_) async => http.Response(
+          jsonEncode({
+            'error': {
+              'code': 403,
+              'message': 'Generative Language API has not been used in project 123 before or it is disabled.',
+              'status': 'PERMISSION_DENIED',
+              'details': [
+                {'reason': 'SERVICE_DISABLED'},
+              ],
+            },
+          }),
+          403)));
+      await expectLater(
+        runTest(c),
+        throwsA(isA<GeminiException>()
+            .having((e) => e.kind, 'kind', GeminiErrorKind.serviceBlocked)
+            .having((e) => e.detail, 'detail', contains('has not been used'))),
+      );
+    });
+
+    test('403 sans motif de service : permission refusée', () async {
+      final c = clientWith(MockClient((_) async => http.Response(
+          jsonEncode({
+            'error': {'code': 403, 'message': 'Model access denied.', 'status': 'PERMISSION_DENIED'},
+          }),
+          403)));
+      await expectLater(
+        runTest(c),
+        throwsA(isA<GeminiException>()
+            .having((e) => e.kind, 'kind', GeminiErrorKind.permissionDenied)
+            .having((e) => e.detail, 'detail', 'Model access denied.')),
+      );
+    });
+
+    test('429 : quota, avec le message de Google', () async {
+      final c = clientWith(MockClient((_) async => http.Response(
+          jsonEncode({
+            'error': {'code': 429, 'message': 'Quota exceeded for metric, limit: 0'},
+          }),
+          429)));
+      await expectLater(
+        runTest(c),
+        throwsA(isA<GeminiException>()
+            .having((e) => e.kind, 'kind', GeminiErrorKind.quota)
+            .having((e) => e.detail, 'detail', contains('limit: 0'))),
+      );
     });
 
     test("le message pour l'enfant ne contient ni clé ni détail technique", () {
