@@ -1,11 +1,11 @@
 {
-    "name": "Revis",
-    "short_name": "Revis",
+    "name": "RevisKids",
+    "short_name": "RevisKids",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#E8F4F1",
     "theme_color": "#1A6FA8",
-    "description": "Réviser le programme de CM1 en s'amusant.",
+    "description": "Apprendre en s’amusant, du CM1 à la Grande Section.",
     "orientation": "any",
     "prefer_related_applications": false,
     "icons": [
